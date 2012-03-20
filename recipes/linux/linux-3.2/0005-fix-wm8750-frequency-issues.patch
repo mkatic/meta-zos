@@ -1,0 +1,37 @@
+From 5c7246572b55c61a7b9d49ed330fb975bd2c9056 Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Wed, 16 Nov 2011 21:44:43 +0100
+Subject: [PATCH 05/15] fix wm8750 frequency issues.
+
+---
+ sound/soc/codecs/wm8750.c |    6 ++++--
+ 1 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/sound/soc/codecs/wm8750.c b/sound/soc/codecs/wm8750.c
+index ca75a81..10cce54 100644
+--- a/sound/soc/codecs/wm8750.c
++++ b/sound/soc/codecs/wm8750.c
+@@ -418,16 +418,18 @@ struct _coeff_div {
+ /* codec hifi mclk clock divider coefficients */
+ static const struct _coeff_div coeff_div[] = {
+ 	/* 8k */
++/* Does not work properly - sound is distorted and attentuated
+ 	{12288000, 8000, 1536, 0x6, 0x0},
+ 	{11289600, 8000, 1408, 0x16, 0x0},
+ 	{18432000, 8000, 2304, 0x7, 0x0},
+ 	{16934400, 8000, 2112, 0x17, 0x0},
+-	{12000000, 8000, 1500, 0x6, 0x1},
++	{12000000, 8000, 1500, 0x6, 0x1}, */
+ 
+ 	/* 11.025k */
++/* Does not work properly - sound is distorted and attentuated
+ 	{11289600, 11025, 1024, 0x18, 0x0},
+ 	{16934400, 11025, 1536, 0x19, 0x0},
+-	{12000000, 11025, 1088, 0x19, 0x1},
++	{12000000, 11025, 1088, 0x19, 0x1}, */
+ 
+ 	/* 16k */
+ 	{12288000, 16000, 768, 0xa, 0x0},
+-- 
+1.7.4.1
+

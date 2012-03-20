@@ -1,0 +1,79 @@
+Index: epdfview-0.1.8/src/gtk/PageView.cxx
+===================================================================
+--- epdfview-0.1.8.orig/src/gtk/PageView.cxx	2012-02-11 01:42:59.000000000 +0100
++++ epdfview-0.1.8/src/gtk/PageView.cxx	2012-02-11 14:12:57.000000000 +0100
+@@ -244,8 +244,6 @@
+ void
+ PageView::scrollPage (gdouble scrollX, gdouble scrollY, gint dx, gint dy)
+ {
+-    /* if the page cannot scroll and i'm dragging bottom to up, or left to right, 
+-     i will go to the next page. viceversa previous page */
+     GtkAdjustment *hAdjustment = gtk_scrolled_window_get_hadjustment (
+             GTK_SCROLLED_WINDOW (m_PageScroll));
+     gdouble hAdjValue = hAdjustment->page_size *
+@@ -263,23 +261,6 @@
+             CLAMP (scrollY - vAdjValue,
+                    vAdjustment->lower,
+                    vAdjustment->upper - vAdjustment->page_size));
+-    
+-    /* if the page cannot scroll and i'm dragging bottom to up, or left to right, 
+-       I will go to the next page. viceversa previous page */
+-    if ( (scrollY == (vAdjustment->upper - vAdjustment->page_size) &&
+-                dy < (-SCROLL_PAGE_DRAG_LENGTH) ) ||
+-        (scrollX == (hAdjustment->upper - hAdjustment->page_size) &&
+-         dx < (-SCROLL_PAGE_DRAG_LENGTH)) )
+-    {
+-        m_Pter->scrollToNextPage();
+-        m_Pter->mouseButtonReleased(1);
+-    }
+-    else if( (scrollY == vAdjustment->lower && dy > SCROLL_PAGE_DRAG_LENGTH) ||
+-        (scrollX == hAdjustment->lower && dx > SCROLL_PAGE_DRAG_LENGTH) )
+-    {
+-        m_Pter->scrollToPreviousPage();
+-        m_Pter->mouseButtonReleased(1);
+-    }
+ }
+ 
+ void 
+@@ -556,17 +537,6 @@
+     GtkAdjustment *adjustment = 
+         gtk_scrolled_window_get_vadjustment (GTK_SCROLLED_WINDOW (widget));
+     gdouble position = gtk_adjustment_get_value (adjustment);
+-    if ( GDK_SCROLL_UP == event->direction && position == adjustment->lower )
+-    {
+-        pter->scrollToPreviousPage ();
+-        return TRUE;
+-    }
+-    else if ( GDK_SCROLL_DOWN == event->direction &&
+-              position == ( adjustment->upper - adjustment->page_size) )
+-    {
+-        pter->scrollToNextPage ();
+-        return TRUE;
+-    }
+ 
+     return FALSE;
+ }
+@@ -601,11 +571,6 @@
+         case GDK_Left:
+         case GDK_KP_Left:
+         case GDK_h:
+-            if ( hposition == hadjustment->lower )
+-            {
+-                pter->scrollToPreviousPage ();
+-                return TRUE;
+-            }
+             direction = GTK_SCROLL_STEP_LEFT;
+             horizontal = TRUE;
+             break;
+@@ -613,11 +578,6 @@
+         case GDK_Right:
+         case GDK_KP_Right:
+         case GDK_l:
+-            if ( hposition == ( hadjustment->upper - hadjustment->page_size) )
+-            {
+-                pter->scrollToNextPage ();
+-                return TRUE;
+-            }
+             horizontal = TRUE;
+             direction = GTK_SCROLL_STEP_RIGHT;
+             break;

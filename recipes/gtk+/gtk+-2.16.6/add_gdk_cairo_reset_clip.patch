@@ -1,0 +1,62 @@
+Index: gtk+-2.16.6/gdk/gdk.symbols
+===================================================================
+--- gtk+-2.16.6.orig/gdk/gdk.symbols	2009-08-29 04:07:53.000000000 +0200
++++ gtk+-2.16.6/gdk/gdk.symbols	2012-03-18 22:39:00.000000000 +0100
+@@ -305,6 +305,7 @@
+ #if IN_HEADER(__GDK_CAIRO_H__)
+ #if IN_FILE(__GDK_CAIRO_C__)
+ gdk_cairo_create
++gdk_cairo_reset_clip
+ gdk_cairo_set_source_color
+ gdk_cairo_set_source_pixbuf
+ gdk_cairo_set_source_pixmap
+Index: gtk+-2.16.6/gdk/gdkcairo.c
+===================================================================
+--- gtk+-2.16.6.orig/gdk/gdkcairo.c	2009-08-29 04:07:53.000000000 +0200
++++ gtk+-2.16.6/gdk/gdkcairo.c	2012-03-18 22:39:17.000000000 +0100
+@@ -56,6 +56,32 @@
+ }
+ 
+ /**
++ * gdk_cairo_reset_clip:
++ * @cr: a #cairo_t
++ * @drawable: a #GdkDrawable
++ *
++ * Resets the clip region for a Cairo context created by gdk_cairo_create().
++ *
++ * This resets the clip region to the "empty" state for the given drawable.
++ * This is required for non-native windows since a direct call to
++ * cairo_reset_clip() would unset the clip region inherited from the
++ * drawable (i.e. the window clip region), and thus let you e.g.
++ * draw outside your window.
++ *
++ * This is rarely needed though, since most code just create a new cairo_t
++ * using gdk_cairo_create() each time they want to draw something.
++ *
++ * Since: 2.18
++ **/
++void
++gdk_cairo_reset_clip (cairo_t            *cr,
++		      GdkDrawable        *drawable)
++{
++  cairo_reset_clip (cr);
++
++}
++
++/**
+  * gdk_cairo_set_source_color:
+  * @cr: a #cairo_t
+  * @color: a #GdkColor
+Index: gtk+-2.16.6/gdk/gdkcairo.h
+===================================================================
+--- gtk+-2.16.6.orig/gdk/gdkcairo.h	2009-06-04 21:18:03.000000000 +0200
++++ gtk+-2.16.6/gdk/gdkcairo.h	2012-03-18 22:39:00.000000000 +0100
+@@ -31,6 +31,8 @@
+ G_BEGIN_DECLS
+ 
+ cairo_t *gdk_cairo_create            (GdkDrawable        *drawable);
++void     gdk_cairo_reset_clip        (cairo_t            *cairo_t,
++				      GdkDrawable        *drawable);
+ 
+ void     gdk_cairo_set_source_color  (cairo_t            *cr,
+                                       const GdkColor     *color);

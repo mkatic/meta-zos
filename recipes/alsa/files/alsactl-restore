@@ -1,0 +1,12 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides: alsactl-restore
+# Required-Start: 1 6
+# Required-Stop:
+# Default-Start: 1 6
+# Default-Stop:
+### END INIT INFO
+
+alsactl -f /etc/asound.state restore
+
+exit 0

@@ -1,0 +1,47 @@
+From 1ec9e5d823aeacc08ce7b81a309791e13c1974e0 Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Mon, 5 Mar 2012 22:34:14 +0100
+Subject: [PATCH 15/15] Add debouncing to all gpio's in gpio-keys.
+
+---
+ arch/arm/mach-pxa/spitz.c |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+diff --git a/arch/arm/mach-pxa/spitz.c b/arch/arm/mach-pxa/spitz.c
+index 37b1a37..814fd42 100644
+--- a/arch/arm/mach-pxa/spitz.c
++++ b/arch/arm/mach-pxa/spitz.c
+@@ -420,12 +420,14 @@ static struct gpio_keys_button spitz_gpio_keys[] = {
+ 	{
+ 		.type	= EV_SW,
+ 		.code	= 0,
++		.debounce_interval = 250,
+ 		.gpio	= SPITZ_GPIO_SWA,
+ 		.desc	= "Display Down",
+ 	},
+ 	{
+ 		.type	= EV_SW,
+ 		.code	= 1,
++		.debounce_interval = 250,
+ 		.gpio	= SPITZ_GPIO_SWB,
+ 		.desc	= "Lid Closed",
+ 	},
+@@ -433,6 +435,7 @@ static struct gpio_keys_button spitz_gpio_keys[] = {
+ 	{
+ 		.type	= EV_SW,
+ 		.code	= 2,
++		.debounce_interval = 250,
+ 		.gpio	= SPITZ_GPIO_USB_DEVICE,
+ 		.desc	= "USB client connected",
+ 	},
+@@ -440,6 +443,7 @@ static struct gpio_keys_button spitz_gpio_keys[] = {
+ 		.type	= EV_SW,
+ 		.code	= 3,
+ 		.active_low = 1,
++		.debounce_interval = 250,
+ 		.gpio	= SPITZ_GPIO_USB_CONNECT,
+ 		.desc	= "USB host cable connected",
+ 	},
+-- 
+1.7.4.1
+

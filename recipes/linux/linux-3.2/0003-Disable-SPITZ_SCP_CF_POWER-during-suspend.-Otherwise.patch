@@ -1,0 +1,35 @@
+From 4dc921c459d75bcccea2326b1cf47cc6032eed17 Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Wed, 16 Nov 2011 21:40:38 +0100
+Subject: [PATCH 03/15] Disable SPITZ_SCP_CF_POWER during suspend. Otherwise it eats battery,
+ fast.
+
+---
+ arch/arm/mach-pxa/include/mach/spitz.h |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm/mach-pxa/include/mach/spitz.h b/arch/arm/mach-pxa/include/mach/spitz.h
+index 685749a..06b7cbc 100644
+--- a/arch/arm/mach-pxa/include/mach/spitz.h
++++ b/arch/arm/mach-pxa/include/mach/spitz.h
+@@ -96,7 +96,7 @@
+ #define SPITZ_SCP_CHRG_ON       SCOOP_GPCR_PA13  /* Keep */
+ #define SPITZ_SCP_MUTE_L        SCOOP_GPCR_PA14  /* Low */
+ #define SPITZ_SCP_MUTE_R        SCOOP_GPCR_PA15  /* Low */
+-#define SPITZ_SCP_CF_POWER      SCOOP_GPCR_PA16  /* Keep */
++#define SPITZ_SCP_CF_POWER      SCOOP_GPCR_PA16  /* Low, CF card eats power */
+ #define SPITZ_SCP_LED_ORANGE    SCOOP_GPCR_PA17  /* Keep */
+ #define SPITZ_SCP_JK_A          SCOOP_GPCR_PA18  /* Low */
+ #define SPITZ_SCP_ADC_TEMP_ON   SCOOP_GPCR_PA19  /* Low */
+@@ -105,7 +105,7 @@
+                                SPITZ_SCP_MUTE_L | SPITZ_SCP_MUTE_R | \
+                                SPITZ_SCP_CF_POWER | SPITZ_SCP_JK_A | SPITZ_SCP_ADC_TEMP_ON)
+ #define SPITZ_SCP_IO_OUT      (SPITZ_SCP_CHRG_ON | SPITZ_SCP_MUTE_L | SPITZ_SCP_MUTE_R)
+-#define SPITZ_SCP_SUS_CLR     (SPITZ_SCP_MUTE_L | SPITZ_SCP_MUTE_R | SPITZ_SCP_JK_A | SPITZ_SCP_ADC_TEMP_ON)
++#define SPITZ_SCP_SUS_CLR     (SPITZ_SCP_MUTE_L | SPITZ_SCP_MUTE_R | SPITZ_SCP_JK_A | SPITZ_SCP_ADC_TEMP_ON | SPITZ_SCP_CF_POWER)
+ #define SPITZ_SCP_SUS_SET     0
+ 
+ #define SPITZ_SCP_GPIO_BASE	(NR_BUILTIN_GPIO)
+-- 
+1.7.4.1
+

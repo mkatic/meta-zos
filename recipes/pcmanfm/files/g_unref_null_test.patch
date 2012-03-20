@@ -1,0 +1,14 @@
+Index: pcmanfm-mod-1.2.3/src/main-window.c
+===================================================================
+--- pcmanfm-mod-1.2.3.orig/src/main-window.c	2011-10-30 23:19:41.000000000 +0100
++++ pcmanfm-mod-1.2.3/src/main-window.c	2011-10-30 23:20:09.000000000 +0100
+@@ -478,7 +478,8 @@
+     else
+         icon = gtk_icon_theme_load_icon( theme, "pcmanfm-mod", 48, 0, NULL );  //MOD
+     gtk_window_set_icon( window, icon );
+-    g_object_unref( icon );
++    if (icon != NULL)
++		g_object_unref( icon );
+ }
+ 
+ static void update_window_icons( GtkIconTheme* theme, GtkWindow* window )

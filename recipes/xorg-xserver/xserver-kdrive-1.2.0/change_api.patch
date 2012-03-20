@@ -1,0 +1,588 @@
+diff --git a/composite/compwindow.c b/composite/compwindow.c
+index 2c86cdd..8341205 100644
+--- a/composite/compwindow.c
++++ b/composite/compwindow.c
+@@ -744,16 +744,21 @@ compWindowUpdateAutomatic (WindowPtr pWin)
+     /*
+      * And paint
+      */
+-    CompositePicture (PictOpSrc,
++    FbComposeData params = {
++    		.op = PictOpSrc,
++    		.xSrc = 0,
++    		.ySrc = 0,
++    		.xMask = 0,
++    		.yMask = 0,
++    		.xDest = pSrcPixmap->screen_x - pParent->drawable.x,
++    		.yDest = pSrcPixmap->screen_y - pParent->drawable.y,
++    		.width = pSrcPixmap->drawable.width,
++    		.height = pSrcPixmap->drawable.height
++    };
++    CompositePicture (&params,
+ 		      pSrcPicture,
+ 		      0,
+-		      pDstPicture,
+-		      0, 0, /* src_x, src_y */
+-		      0, 0, /* msk_x, msk_y */
+-		      pSrcPixmap->screen_x - pParent->drawable.x,
+-		      pSrcPixmap->screen_y - pParent->drawable.y,
+-		      pSrcPixmap->drawable.width,
+-		      pSrcPixmap->drawable.height);
++		      pDstPicture);
+     FreePicture (pSrcPicture, 0);
+     FreePicture (pDstPicture, 0);
+     /*
+diff --git a/fb/fbpict.c b/fb/fbpict.c
+index f118bc8..656048d 100644
+--- a/fb/fbpict.c
++++ b/fb/fbpict.c
+@@ -963,18 +963,18 @@ fbCompositeSolidMask_nx1xn (CARD8      op,
+ # define mod(a,b)	((b) == 1 ? 0 : (a) >= 0 ? (a) % (b) : (b) - (-a) % (b))
+ 
+ void
+-fbComposite (CARD8      op,
++fbComposite (int      op,
+ 	     PicturePtr pSrc,
+ 	     PicturePtr pMask,
+ 	     PicturePtr pDst,
+-	     INT16      xSrc,
+-	     INT16      ySrc,
+-	     INT16      xMask,
+-	     INT16      yMask,
+-	     INT16      xDst,
+-	     INT16      yDst,
+-	     CARD16     width,
+-	     CARD16     height)
++	     int      xSrc,
++	     int      ySrc,
++	     int      xMask,
++	     int      yMask,
++	     int      xDst,
++	     int      yDst,
++	     int     width,
++	     int     height)
+ {
+     RegionRec	    region;
+     int		    n;
+diff --git a/fb/fbpict.h b/fb/fbpict.h
+index 179a07d..73d7f1d 100644
+--- a/fb/fbpict.h
++++ b/fb/fbpict.h
+@@ -362,21 +362,6 @@ fbCanGetSolid(PicturePtr pict)
+ #define FASTCALL
+ #endif
+ 
+-typedef struct _FbComposeData {
+-    CARD8	op;
+-    PicturePtr	src;
+-    PicturePtr	mask;
+-    PicturePtr	dest;
+-    INT16	xSrc;
+-    INT16	ySrc;
+-    INT16	xMask;
+-    INT16	yMask;
+-    INT16	xDest;
+-    INT16	yDest;
+-    CARD16	width;
+-    CARD16	height;
+-} FbComposeData;
+-
+ typedef FASTCALL void (*CombineMaskU) (CARD32 *src, const CARD32 *mask, int width);
+ typedef FASTCALL void (*CombineFuncU) (CARD32 *dest, const CARD32 *src, int width);
+ typedef FASTCALL void (*CombineFuncC) (CARD32 *dest, CARD32 *src, CARD32 *mask, int width);
+@@ -608,18 +593,18 @@ fbCompositeSolidMask_nx1xn (CARD8      op,
+ 			    CARD16     height);
+ 
+ void
+-fbComposite (CARD8      op,
++fbComposite (int      op,
+ 	     PicturePtr pSrc,
+ 	     PicturePtr pMask,
+ 	     PicturePtr pDst,
+-	     INT16      xSrc,
+-	     INT16      ySrc,
+-	     INT16      xMask,
+-	     INT16      yMask,
+-	     INT16      xDst,
+-	     INT16      yDst,
+-	     CARD16     width,
+-	     CARD16     height);
++	     int      xSrc,
++	     int      ySrc,
++	     int      xMask,
++	     int      yMask,
++	     int      xDst,
++	     int      yDst,
++	     int     width,
++	     int     height);
+ 
+ /* fbtrap.c */
+ 
+diff --git a/mi/midispcur.c b/mi/midispcur.c
+index de009cb..977343f 100644
+--- a/mi/midispcur.c
++++ b/mi/midispcur.c
+@@ -483,14 +483,23 @@ miDCPutUpCursor (pScreen, pCursor, x, y, source, mask)
+     {
+ 	if (!EnsurePicture(pScreenPriv->pRootPicture, &pWin->drawable, pWin))
+ 	    return FALSE;
+-	CompositePicture (PictOpOver,
++
++	 FbComposeData params = {
++	    		.op = PictOpOver,
++	    		.xSrc = 0,
++	    		.ySrc = 0,
++	    		.xMask = 0,
++	    		.yMask = 0,
++	    		.xDest = x,
++	    		.yDest = y,
++	    		.width = pCursor->bits->width,
++	    		.height = pCursor->bits->height
++	 };
++
++	CompositePicture (&params,
+ 			  pPriv->pPicture,
+ 			  NULL,
+-			  pScreenPriv->pRootPicture,
+-			  0, 0, 0, 0, 
+-			  x, y, 
+-			  pCursor->bits->width,
+-			  pCursor->bits->height);
++			  pScreenPriv->pRootPicture);
+     }
+     else
+ #endif
+@@ -767,14 +776,23 @@ miDCMoveCursor (pScreen, pCursor, x, y, w, h, dx, dy, source, mask)
+     {
+ 	if (!EnsurePicture(pScreenPriv->pTempPicture, &pTemp->drawable, pWin))
+ 	    return FALSE;
+-	CompositePicture (PictOpOver,
++
++	 FbComposeData params = {
++	    		.op = PictOpOver,
++	    		.xSrc = 0,
++	    		.ySrc = 0,
++	    		.xMask = 0,
++	    		.yMask = 0,
++	    		.xDest = dx,
++	    		.yDest = dy,
++	    		.width = pCursor->bits->width,
++	    		.height = pCursor->bits->height
++	 };
++
++	CompositePicture (&params,
+ 			  pPriv->pPicture,
+ 			  NULL,
+-			  pScreenPriv->pTempPicture,
+-			  0, 0, 0, 0, 
+-			  dx, dy, 
+-			  pCursor->bits->width,
+-			  pCursor->bits->height);
++			  pScreenPriv->pTempPicture);
+     }
+     else
+ #endif
+diff --git a/miext/damage/damage.c b/miext/damage/damage.c
+index 2e80011..b53b50a 100755
+--- a/miext/damage/damage.c
++++ b/miext/damage/damage.c
+@@ -507,19 +507,12 @@ damageDestroyClip(GCPtr pGC)
+ #define checkPictureDamage(p)	(getDrawableDamage(p->pDrawable) && \
+ 				 REGION_NOTEMPTY(pScreen, p->pCompositeClip))
+ 
+-static void
+-damageComposite (CARD8      op,
++
++
++void damageComposite (FbComposeData *params,
+ 		   PicturePtr pSrc,
+ 		   PicturePtr pMask,
+-		   PicturePtr pDst,
+-		   INT16      xSrc,
+-		   INT16      ySrc,
+-		   INT16      xMask,
+-		   INT16      yMask,
+-		   INT16      xDst,
+-		   INT16      yDst,
+-		   CARD16     width,
+-		   CARD16     height)
++		   PicturePtr pDst)
+ {
+     ScreenPtr		pScreen = pDst->pDrawable->pScreen;
+     PictureScreenPtr	ps = GetPictureScreen(pScreen);
+@@ -529,27 +522,27 @@ damageComposite (CARD8      op,
+     {
+ 	BoxRec	box;
+ 
+-	box.x1 = xDst + pDst->pDrawable->x;
+-	box.y1 = yDst + pDst->pDrawable->y;
+-	box.x2 = box.x1 + width;
+-	box.y2 = box.y1 + height;
++	box.x1 = params->xDest + pDst->pDrawable->x;
++	box.y1 = params->yDest + pDst->pDrawable->y;
++	box.x2 = box.x1 + params->width;
++	box.y2 = box.y1 + params->height;
+ 	TRIM_PICTURE_BOX(box, pDst);
+ 	if (BOX_NOT_EMPTY(box))
+ 	    damageDamageBox (pDst->pDrawable, &box, pDst->subWindowMode);
+     }
+     unwrap (pScrPriv, ps, Composite);
+-    (*ps->Composite) (op,
++    (*ps->Composite) (params->op,
+ 		       pSrc,
+ 		       pMask,
+ 		       pDst,
+-		       xSrc,
+-		       ySrc,
+-		       xMask,
+-		       yMask,
+-		       xDst,
+-		       yDst,
+-		       width,
+-		       height);
++	           params->xSrc,
++		       params->ySrc,
++		       params->xMask,
++		       params->yMask,
++		       params->xDest,
++			   params->yDest,
++		       params->width,
++		       params->height);
+     wrap (pScrPriv, ps, Composite, damageComposite);
+ }
+ 
+diff --git a/render/miglyph.c b/render/miglyph.c
+index 7968c90..80e0b3f 100644
+--- a/render/miglyph.c
++++ b/render/miglyph.c
+@@ -197,32 +197,42 @@ miGlyphs (CARD8		op,
+ 					    glyph->info.width, glyph->info.height,
+ 					    0, 0, -1, (pointer) (glyph + 1));
+ 	    pPixmap->drawable.serialNumber = NEXT_SERIAL_NUMBER;
++
+ 	    if (maskFormat)
+ 	    {
+-		CompositePicture (PictOpAdd,
++		FbComposeData params = {
++		    		.op = PictOpAdd,
++		    		.xSrc = 0,
++		    		.ySrc = 0,
++		    		.xMask = 0,
++		    		.yMask = 0,
++		    		.xDest = x - glyph->info.x,
++		    		.yDest = y - glyph->info.y,
++		    		.width = glyph->info.width,
++		    		.height = glyph->info.height
++		    };
++		CompositePicture (&params,
+ 				  pPicture,
+ 				  None,
+-				  pMask,
+-				  0, 0,
+-				  0, 0,
+-				  x - glyph->info.x,
+-				  y - glyph->info.y,
+-				  glyph->info.width,
+-				  glyph->info.height);
++				  pMask);
+ 	    }
+ 	    else
+ 	    {
+-		CompositePicture (op,
++		 FbComposeData params = {
++		    		.op = op,
++		    		.xSrc = xSrc + (x - glyph->info.x) - xDst,
++		    		.ySrc = ySrc + (y - glyph->info.y) - yDst,
++		    		.xMask = 0,
++		    		.yMask = 0,
++		    		.xDest = x - glyph->info.x,
++		    		.yDest = y - glyph->info.y,
++		    		.width = glyph->info.width,
++		    		.height = glyph->info.height
++		    };
++		CompositePicture (&params,
+ 				  pSrc,
+ 				  pPicture,
+-				  pDst,
+-				  xSrc + (x - glyph->info.x) - xDst,
+-				  ySrc + (y - glyph->info.y) - yDst,
+-				  0, 0,
+-				  x - glyph->info.x,
+-				  y - glyph->info.y,
+-				  glyph->info.width,
+-				  glyph->info.height);
++				  pDst);
+ 	    }
+ 	    x += glyph->info.xOff;
+ 	    y += glyph->info.yOff;
+@@ -240,15 +250,21 @@ miGlyphs (CARD8		op,
+     {
+ 	x = extents.x1;
+ 	y = extents.y1;
+-	CompositePicture (op,
++	 FbComposeData params = {
++	    		.op = op,
++	    		.xSrc = xSrc + x - xDst,
++	    		.ySrc = ySrc + y - yDst,
++	    		.xMask = 0,
++	    		.yMask = 0,
++	    		.xDest = x,
++	    		.yDest = y,
++	    		.width = width,
++	    		.height = height
++	    };
++	CompositePicture (&params,
+ 			  pSrc,
+ 			  pMask,
+-			  pDst,
+-			  xSrc + x - xDst,
+-			  ySrc + y - yDst,
+-			  0, 0,
+-			  x, y,
+-			  width, height);
++			  pDst);
+ 	FreePicture ((pointer) pMask, (XID) 0);
+ 	(*pScreen->DestroyPixmap) (pMaskPixmap);
+     }
+diff --git a/render/mirect.c b/render/mirect.c
+index 87767a7..38af8d8 100644
+--- a/render/mirect.c
++++ b/render/mirect.c
+@@ -162,14 +162,20 @@ miCompositeRects (CARD8		op,
+ 			      
+ 	if (!pSrc)
+ 	    goto bail4;
+-
++    FbComposeData params = {
++    		.op = op,
++    		.xSrc = 0,
++    		.ySrc = 0,
++    		.xMask = 0,
++    		.yMask = 0,
++    		.xDest = rects->x,
++    		.yDest = rects->y,
++    		.width = rects->width,
++    		.height = rects->height
++    };
+ 	while (nRect--)
+ 	{
+-	    CompositePicture (op, pSrc, 0, pDst, 0, 0, 0, 0, 
+-			      rects->x,
+-			      rects->y,
+-			      rects->width,
+-			      rects->height);
++	    CompositePicture (&params, pSrc, 0, pDst);
+ 	    rects++;
+ 	}
+ 
+diff --git a/render/mitrap.c b/render/mitrap.c
+index c618806..cdf5bfa 100644
+--- a/render/mitrap.c
++++ b/render/mitrap.c
+@@ -171,10 +171,18 @@ miTrapezoids (CARD8	    op,
+ 				       -bounds.x1, -bounds.y1);
+ 	xRel = bounds.x1 + xSrc - xDst;
+ 	yRel = bounds.y1 + ySrc - yDst;
+-	CompositePicture (op, pSrc, pPicture, pDst,
+-			  xRel, yRel, 0, 0, bounds.x1, bounds.y1,
+-			  bounds.x2 - bounds.x1,
+-			  bounds.y2 - bounds.y1);
++	 FbComposeData params = {
++	    		.op = op,
++	    		.xSrc = xRel,
++	    		.ySrc = yRel,
++	    		.xMask = 0,
++	    		.yMask = 0,
++	    		.xDest = bounds.x1,
++	    		.yDest = bounds.y1,
++	    		.width = bounds.x2 - bounds.x1,
++	    		.height = bounds.y2 - bounds.y1
++	    };
++	CompositePicture (&params, pSrc, pPicture, pDst);
+ 	FreePicture (pPicture, 0);
+     }
+     else
+diff --git a/render/mitri.c b/render/mitri.c
+index 374e2fd..87a6cd2 100644
+--- a/render/mitri.c
++++ b/render/mitri.c
+@@ -109,9 +109,18 @@ miTriangles (CARD8	    op,
+ 	
+ 	xRel = bounds.x1 + xSrc - xDst;
+ 	yRel = bounds.y1 + ySrc - yDst;
+-	CompositePicture (op, pSrc, pPicture, pDst,
+-			  xRel, yRel, 0, 0, bounds.x1, bounds.y1,
+-			  bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
++	 FbComposeData params = {
++	    		.op = op,
++	    		.xSrc = xRel,
++	    		.ySrc = yRel,
++	    		.xMask = 0,
++	    		.yMask = 0,
++	    		.xDest = bounds.x1,
++	    		.yDest = bounds.y1,
++	    		.width = bounds.x2 - bounds.x1,
++	    		.height = bounds.y2 - bounds.y1
++	 };
++	CompositePicture (&params, pSrc, pPicture, pDst);
+ 	FreePicture (pPicture, 0);
+     }
+     else
+diff --git a/render/picture.c b/render/picture.c
+index a3443c2..2340027 100644
+--- a/render/picture.c
++++ b/render/picture.c
+@@ -1767,19 +1767,10 @@ ReduceCompositeOp (CARD8 op, PicturePtr pSrc, PicturePtr pMask, PicturePtr pDst)
+     return op;
+ }
+ 
+-void
+-CompositePicture (CARD8		op,
++CompositePicture (FbComposeData *params,
+ 		  PicturePtr	pSrc,
+ 		  PicturePtr	pMask,
+-		  PicturePtr	pDst,
+-		  INT16		xSrc,
+-		  INT16		ySrc,
+-		  INT16		xMask,
+-		  INT16		yMask,
+-		  INT16		xDst,
+-		  INT16		yDst,
+-		  CARD16	width,
+-		  CARD16	height)
++		  PicturePtr	pDst)
+ {
+     PictureScreenPtr	ps = GetPictureScreen(pDst->pDrawable->pScreen);
+     
+@@ -1788,22 +1779,14 @@ CompositePicture (CARD8		op,
+ 	ValidatePicture (pMask);
+     ValidatePicture (pDst);
+ 
+-    op = ReduceCompositeOp (op, pSrc, pMask, pDst);
+-    if (op == PictOpDst)
++    params->op = ReduceCompositeOp (params->op, pSrc, pMask, pDst);
++    if (params->op == PictOpDst)
+ 	return;
+ 
+-    (*ps->Composite) (op,
++    damageComposite (params,
+ 		       pSrc,
+ 		       pMask,
+-		       pDst,
+-		       xSrc,
+-		       ySrc,
+-		       xMask,
+-		       yMask,
+-		       xDst,
+-		       yDst,
+-		       width,
+-		       height);
++		       pDst);
+ }
+ 
+ void
+diff --git a/render/picturestr.h b/render/picturestr.h
+index f1617f6..99af12a 100644
+--- a/render/picturestr.h
++++ b/render/picturestr.h
+@@ -62,6 +62,21 @@ typedef struct _PictTransform {
+     xFixed	    matrix[3][3];
+ } PictTransform, *PictTransformPtr;
+ 
++typedef struct _FbComposeData {
++    int	op;
++    PicturePtr	src;
++    PicturePtr	mask;
++    PicturePtr	dest;
++    int	xSrc;
++    int	ySrc;
++    int	xMask;
++    int	yMask;
++    int	xDest;
++    int	yDest;
++    int	width;
++    int	height;
++} FbComposeData;
++
+ #define PICT_GRADIENT_STOPTABLE_SIZE 1024
+ #define SourcePictTypeSolidFill 0
+ #define SourcePictTypeLinear 1
+@@ -545,18 +560,10 @@ FreePictFormat (pointer	pPictFormat,
+ 		XID     pid);
+ 
+ void
+-CompositePicture (CARD8		op,
++CompositePicture (FbComposeData *params,
+ 		  PicturePtr	pSrc,
+ 		  PicturePtr	pMask,
+-		  PicturePtr	pDst,
+-		  INT16		xSrc,
+-		  INT16		ySrc,
+-		  INT16		xMask,
+-		  INT16		yMask,
+-		  INT16		xDst,
+-		  INT16		yDst,
+-		  CARD16	width,
+-		  CARD16	height);
++		  PicturePtr	pDst);
+ 
+ void
+ CompositeGlyphs (CARD8		op,
+diff --git a/render/render.c b/render/render.c
+index 55f360a..599d2c6 100644
+--- a/render/render.c
++++ b/render/render.c
+@@ -753,18 +753,21 @@ ProcRenderComposite (ClientPtr client)
+     if ((pSrc->pDrawable && pSrc->pDrawable->pScreen != pDst->pDrawable->pScreen) ||
+ 	(pMask && pMask->pDrawable && pDst->pDrawable->pScreen != pMask->pDrawable->pScreen))
+ 	return BadMatch;
+-    CompositePicture (stuff->op,
++	 FbComposeData params = {
++	    		.op = stuff->op,
++	    		.xSrc = stuff->xSrc,
++	    		.ySrc = stuff->ySrc,
++	    		.xMask = stuff->xMask,
++	    		.yMask = stuff->yMask,
++	    		.xDest = stuff->xDst,
++	    		.yDest = stuff->yDst,
++	    		.width = stuff->width,
++	    		.height = stuff->height
++	 };
++    CompositePicture (&params,
+ 		      pSrc,
+ 		      pMask,
+-		      pDst,
+-		      stuff->xSrc,
+-		      stuff->ySrc,
+-		      stuff->xMask,
+-		      stuff->yMask,
+-		      stuff->xDst,
+-		      stuff->yDst,
+-		      stuff->width,
+-		      stuff->height);
++		      pDst);
+     return Success;
+ }
+ 
+@@ -1566,9 +1569,18 @@ ProcRenderCreateCursor (ClientPtr client)
+ 	    return error;
+ 	}
+ 	(*pScreen->DestroyPixmap) (pPixmap);
+-	CompositePicture (PictOpSrc,
+-			  pSrc, 0, pPicture,
+-			  0, 0, 0, 0, 0, 0, width, height);
++	 FbComposeData params = {
++	    		.op = PictOpSrc,
++	    		.xSrc = 0,
++	    		.ySrc = 0,
++	    		.xMask = 0,
++	    		.yMask = 0,
++	    		.xDest = 0,
++	    		.yDest = 0,
++	    		.width = width,
++	    		.height = height
++	 };
++	CompositePicture (&params, pSrc, 0, pPicture);
+ 	(*pScreen->GetImage) (pPicture->pDrawable,
+ 			      0, 0, width, height, ZPixmap,
+ 			      0xffffffff, (pointer) argbbits);

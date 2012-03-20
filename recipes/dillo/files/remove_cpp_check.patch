@@ -1,0 +1,21 @@
+Index: dillo-3.0.2/configure.in
+===================================================================
+--- dillo-3.0.2.orig/configure.in	2012-03-12 23:46:20.000000000 +0100
++++ dillo-3.0.2/configure.in	2012-03-12 23:46:35.000000000 +0100
+@@ -56,16 +56,6 @@
+ AC_TYPE_INT32_T
+ AC_TYPE_UINT32_T
+ 
+-dnl --------------------------------------
+-dnl Check whether to add /usr/local or not
+-dnl (this is somewhat a religious problem)
+-dnl --------------------------------------
+-dnl
+-if test "`$CPP -v < /dev/null 2>&1 | grep '/usr/local/include' 2>&1`" = ""; then
+-  CPPFLAGS="$CPPFLAGS -I/usr/local/include"
+-  LDFLAGS="$LDFLAGS -L/usr/local/lib"
+-fi
+-
+ dnl ------------------------------------
+ dnl Check for socket libs (AIX, Solaris)
+ dnl ------------------------------------

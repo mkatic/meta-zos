@@ -1,0 +1,526 @@
+diff --git a/config.h.in b/config.h.in
+index 0109199..99ee711 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -58,6 +58,9 @@
+ /* Define to 1 if you have the <unistd.h> header file. */
+ #undef HAVE_UNISTD_H
+ 
++/* enable usb switching */
++#undef HAVE_USB_SWITCHING
++
+ /* Define to 1 if the system has the type `_Bool'. */
+ #undef HAVE__BOOL
+ 
+diff --git a/configure.ac b/configure.ac
+index e338f4c..3ead630 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -22,6 +22,10 @@ evfilter_h=no
+ AC_CHECK_HEADER(evfilter/evfilter.h, [evfilter_h=yes])
+ AS_IF([test "x$evfilter_h" != "xyes"], [AC_MSG_ERROR([evfilter.h header not found.])])
+ 
++#optional features
++
++AC_ARG_ENABLE([usb-switching], [--enable-usb-switching	Add support for host/client usb switching], [usb_switching=${enableval}], [usb_switching=no])
++AS_IF([test "x$usb_switching" == "xyes"], [AC_DEFINE([HAVE_USB_SWITCHING], [1], [enable usb switching])])
+ # Checks for typedefs, structures, and compiler characteristics.
+ AC_HEADER_STDBOOL
+ AC_TYPE_PID_T
+@@ -34,3 +38,7 @@ AC_CHECK_FUNCS([memmove socket stime strcasecmp strerror])
+ 
+ AC_CONFIG_FILES([Makefile src/Makefile])
+ AC_OUTPUT
++
++echo ""
++echo ""
++echo "usb host/client switching: ${usb_switching}"
+diff --git a/src/Makefile.in b/src/Makefile.in
+index 4c97d6d..e9438a3 100644
+--- a/src/Makefile.in
++++ b/src/Makefile.in
+@@ -10,6 +10,7 @@ sysconfdir = ${DESTDIR}@sysconfdir@
+ 
+ OBJECTS=pidfile.o backlight.o power.o time.o zaurusd.o msg.o\
+         socket.o socket_cmd.o lcd.o sysfs.o display.o
++OBJECTS += usb.o
+ 
+ CTL_OBJECTS=zaurusd-ctl.o msg.o socket.o
+ 
+@@ -56,3 +57,4 @@ time.o: time.c config.h time.h msg.h
+ zaurusd-ctl.o: zaurusd-ctl.c msg.h config.h socket.h socket_cmd.h
+ zaurusd.o: zaurusd.c config.h backlight.h display.h power.h time.h \
+   pidfile.h socket.h msg.h socket_cmd.h
++usb.o: usb.c usb.h
+diff --git a/src/socket_cmd.c b/src/socket_cmd.c
+index b0702c9..ba0f2af 100644
+--- a/src/socket_cmd.c
++++ b/src/socket_cmd.c
+@@ -26,6 +26,7 @@
+ #include "backlight.h"
+ #include "display.h"
+ #include "msg.h"
++#include "../config.h"
+ 
+ const char *scmd_name[] = {
+ 	"exit",
+@@ -121,6 +122,16 @@ int scmd_update(char *buf, int len, struct scmd_config *config)
+ 					return pos - 1;
+ 				backlight_set(buf[pos+1]);
+ 			break;
++#ifdef HAVE_USB_SWITCHING
++			case SCMD_USB_CLIENT_SET_MODE:
++				if (pos + 1 >= len)
++					return pos - 1;
++
++				usb_client_set_mode(&buf[pos+1]);
++
++				pos += strlen(&buf[pos]+1) + 1; /* skip over the string */
++#endif
++			break;
+ 			default:
+ 				msg_print(MSG_WARN, "invalid command from zaurusd-ctl, closing connection...");
+ 				return -1;
+diff --git a/src/socket_cmd.h b/src/socket_cmd.h
+index 9c01ed9..d134ae2 100644
+--- a/src/socket_cmd.h
++++ b/src/socket_cmd.h
+@@ -47,6 +47,8 @@
+ 
+ #define SCMD_CNT (SCMD_BACKLIGHT_GET + 1) /* last command + 1 */
+ 
++#define SCMD_USB_CLIENT_SET_MODE   0x0b
++
+ /* commands description */
+ extern const char *scmd_name[];
+ extern const char *scmd_desc[];
+diff --git a/src/usb.c b/src/usb.c
+new file mode 100644
+index 0000000..0c87cae
+--- /dev/null
++++ b/src/usb.c
+@@ -0,0 +1,177 @@
++
++#include "../config.h"
++#ifdef HAVE_USB_SWITCHING
++#include <stdio.h>
++#include <errno.h>
++#include <string.h>
++#include <sys/mman.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <unistd.h>
++#include <stdlib.h>
++#include <time.h>
++#include <linux/ioctl.h>
++#include <linux/input.h>
++#include "usb.h"
++#include "sysfs.h"
++#include "msg.h"
++
++
++
++static void up2ocr_write(unsigned int reg_value) {
++/*mostly taken from pxaregs */
++	int fd;
++	void *map;
++	volatile void *up2ocr;
++
++	fd = open("/dev/mem", O_RDWR|O_SYNC);
++	map = mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_SHARED, fd, UP2OCR_REG & ~MAP_MASK);
++	up2ocr = map + (UP2OCR_REG & MAP_MASK);
++
++	*(unsigned int*)up2ocr = reg_value;
++
++	munmap(map,MAP_SIZE);
++	close(fd);
++}
++
++static int check_switch_state (int sw) {
++
++	int fd;
++	char switch_state;
++
++	fd = open("/dev/input/event2", O_RDONLY);
++
++	switch_state = 0;
++    ioctl(fd, EVIOCGSW(sizeof(switch_state)), &switch_state);
++
++    close(fd);
++    return (switch_state & (1 << sw));
++}
++
++static void usb_power_disable () {
++	sysfs_write(SYSFS_GPIO_EXPORT, USB_POWER_GPIO);
++	sysfs_write(USB_POWER_GPIO_TOGGLE, 0);
++	sysfs_write(SYSFS_GPIO_UNEXPORT, USB_POWER_GPIO);
++}
++
++static void usb_power_enable () {
++	sysfs_write(SYSFS_GPIO_EXPORT, USB_POWER_GPIO);
++	sysfs_write(USB_POWER_GPIO_TOGGLE, 1);
++	sysfs_write(SYSFS_GPIO_UNEXPORT, USB_POWER_GPIO);
++}
++
++void disable_usb_host() {
++
++		system(usb_host_rmmod);
++		system("rmmod usb_common");
++		system("rmmod usbcore");
++		usb_power_disable();
++		usb_host_active = 0;
++}
++
++void enable_usb_host() {
++
++	if(check_switch_state(USB_HOST_CABLE)) {
++		usb_power_enable();
++		system(usb_host_modprobe);
++		up2ocr_write(USB_HOST_MAGIC);
++		usb_host_active = 1;
++	}
++}
++
++void enable_usb_client() {
++
++	/*this is necessary because enabling
++	 * usb host will trigger the usb client
++	 * gpio.
++	 */
++	if (usb_host_active)
++		return;
++
++	/*after suspend, it is not possible to switch
++	 * UP2OCR_DMPUE on. I dont know why. loading and
++	 * unloading ohci-hcd fixes this. This is very ugly.
++	 */
++	system("modprobe ohci-hcd");
++	disable_usb_host();
++
++	if(check_switch_state(USB_CLIENT_CABLE)) {
++		system("modprobe pxa27x_udc");
++		system(usb_client_modprobe);
++		up2ocr_write(USB_CLIENT_MAGIC);
++		usb_client_active = 1;
++	}
++}
++
++void disable_usb_client () {
++
++	system(usb_client_rmmod);
++	system("rmmod pxa27x_udc");
++	system("rmmod udc_core");
++	system("rmmod usb_common");
++	system("rmmod usbcore");
++	usb_client_active = 0;
++}
++
++void usb_init () {
++
++/*default values for modprobe & rmmod */
++
++	usb_client_modprobe = "modprobe g_ether";
++	usb_client_rmmod = "rmmod g_ether";
++	usb_host_modprobe = "modprobe ohci-hcd";
++	usb_host_rmmod = "rmmod ohci-hcd";
++
++	if (check_switch_state(USB_HOST_CABLE))
++		enable_usb_host();
++	else
++		disable_usb_host();
++
++	if (check_switch_state(USB_CLIENT_CABLE))
++		enable_usb_client();
++	else
++		disable_usb_client();
++}
++
++void usb_client_set_mode (char *mode_str) {
++
++	char *chr_ptr;
++	char *module;
++	char *dup_str;
++	int i;
++
++	disable_usb_client();
++	
++	if (!usb_client_mode_changed) { /* allocate memory for strings only once */
++		usb_client_modprobe = malloc(1024);
++		usb_client_rmmod = malloc(1024);
++	}
++	
++	usb_client_mode_changed = 1; /* serves as a flag */
++
++	dup_str = strdup(mode_str);
++	module = strtok(dup_str, ","); /* get module name */
++	
++	chr_ptr = mode_str;
++	for (i = 0; i <= strlen(mode_str); i++) {
++		if (*chr_ptr == ',')
++			*chr_ptr = ' '; /* replace comma's with whitespace */
++		chr_ptr++;
++	}
++	
++	memset(usb_client_modprobe, 0, 1024);
++	strcat (usb_client_modprobe, "modprobe ");
++	strcat (usb_client_modprobe, mode_str);
++	
++	memset(usb_client_rmmod, 0, 1024);
++	strcat (usb_client_rmmod, "rmmod ");
++	strcat (usb_client_rmmod, module);
++
++	if(check_switch_state(USB_CLIENT_CABLE)) {
++		enable_usb_client();
++	}
++
++	free(dup_str);
++}
++#endif
+diff --git a/src/usb.h b/src/usb.h
+new file mode 100644
+index 0000000..c658597
+--- /dev/null
++++ b/src/usb.h
+@@ -0,0 +1,52 @@
++
++#ifndef USB_H_
++#define USB_H_
++
++#include "../config.h"
++
++/* USB_CLIENT_MAGIC and USB_HOST_MAGIC are values for the UP2OCR
++ * register that enable host or client mode. Since
++ * I dont know what exactly they do, i call it magic.
++ */
++#define USB_CLIENT_MAGIC 0x00020070
++#define USB_HOST_MAGIC 0x0003000c
++
++#define USB_CLIENT_CABLE 2
++#define USB_HOST_CABLE 3
++
++#define UP2OCR_REG 0x40600020
++#define MAP_SIZE 4096
++#define MAP_MASK ( MAP_SIZE - 1 )
++#define USB_POWER_GPIO 37
++
++#define SYSFS_GPIO_EXPORT "/sys/class/gpio/export"
++#define SYSFS_GPIO_UNEXPORT "/sys/class/gpio/unexport"
++
++#define USB_POWER_GPIO_TOGGLE "/sys/class/gpio/gpio37/value"
++
++int usb_host_active;
++int usb_client_active;
++int usb_client_mode_changed;
++
++char *usb_client_modprobe;
++char *usb_host_modprobe;
++char *usb_client_rmmod;
++char *usb_host_rmmod;
++
++#ifdef HAVE_USB_SWITCHING
++void enable_usb_client();
++void disable_usb_client();
++void enable_usb_host();
++void disable_usb_host();
++void usb_init();
++void usb_client_set_mode();
++#else
++#define enable_usb_client()
++#define disable_usb_client()
++#define enable_usb_host()
++#define disable_usb_host()
++#define usb_init()
++#define usb_client_set_mode()
++#endif
++
++#endif /* USB_H_ */
+diff --git a/src/zaurusd-ctl.c b/src/zaurusd-ctl.c
+index 19086bb..ccf1193 100644
+--- a/src/zaurusd-ctl.c
++++ b/src/zaurusd-ctl.c
+@@ -22,13 +22,15 @@
+ 
+ #include <unistd.h>
+ #include <errno.h>
++#include <stdio.h>
+ #include <string.h>
+ #include <stdlib.h>
+-
++#include <getopt.h>
+ #include "msg.h"
+ #include "config.h"
+ #include "socket.h"
+ #include "socket_cmd.h"
++#include "../config.h"
+ 
+ static void do_write(int fd, const char *buf, int len)
+ {
+@@ -70,6 +72,11 @@ static void command_send_u8(int fd, char cmd, uint8_t val)
+ 	do_write(fd, buf, 3);
+ }
+ 
++static void command_send_string(int fd, char *str)
++{
++	do_write(fd, str, (strlen(str)+1));
++}
++
+ static void parse_backlight(int fd, char *optarg)
+ {
+ 	uint8_t val;
+@@ -131,10 +138,35 @@ static void parse_suspend(int fd, char *optarg)
+ 	}
+ }
+ 
++#ifdef HAVE_USB_SWITCHING
++static void parse_usb_modes (int fd, char *optarg) {
++
++	char *usb_mode;
++	char *dup_str;
++
++	dup_str = strdup (optarg);
++	usb_mode = strtok (dup_str, ",");
++
++		if (!strcasecmp(usb_mode, "g_ether")) {
++			command_send(fd, SCMD_USB_CLIENT_SET_MODE);
++			command_send_string(fd, optarg);
++		}
++		else if (!strcasecmp(usb_mode, "g_mass_storage")) {
++			command_send(fd, SCMD_USB_CLIENT_SET_MODE);
++			command_send_string(fd, optarg);
++		}
++		else
++			printf ("invalid usb client mode: %s\n", usb_mode);
++
++		free(dup_str);
++}
++#endif
++
+ int main(int argc, char *argv[])
+ {
+ 	int fd;
+ 	int opt;
++	int option_index;
+ 
+ 	msg_set_name("zaurusd-ctl: ");
+ 	
+@@ -145,7 +177,14 @@ int main(int argc, char *argv[])
+ 		return 1;
+ 	}
+ 	
+-	while ((opt = getopt(argc, argv, "b:hs:")) != -1) {
++	static struct option long_options[] =  {
++			{"backlight", required_argument, 0,'b' },
++			{"suspend", required_argument, 0, 's' },
++			{"usb_client_mode", required_argument, 0, 'u'},
++			{0, 0, 0, 0}
++	};
++
++	while ((opt = getopt_long(argc, argv, "b:hs:u:", long_options, &option_index)) != -1) {
+ 		switch (opt) {
+ 			case 'b':
+ 				parse_backlight(fd, optarg);
+@@ -154,8 +193,12 @@ int main(int argc, char *argv[])
+ 				parse_suspend(fd, optarg);
+ 			break;
+ 			case 'h':
+-
+ 			break;
++#ifdef HAVE_USB_SWITCHING
++			case 'u':
++				parse_usb_modes(fd, optarg);
++			break;
++#endif
+ 		}
+ 	}
+ 
+diff --git a/src/zaurusd.c b/src/zaurusd.c
+index 7ecd007..eeb10ff 100644
+--- a/src/zaurusd.c
++++ b/src/zaurusd.c
+@@ -31,8 +31,8 @@
+ #include <signal.h>
+ #include <time.h>
+ #include <linux/input.h>
+-#include <evfilter.h>
+-
++#include <evfilter/evfilter.h>
++# include <sys/syscall.h>
+ #include "config.h"
+ #include "backlight.h"
+ #include "display.h"
+@@ -42,6 +42,7 @@
+ #include "socket.h"
+ #include "msg.h"
+ #include "socket_cmd.h"
++#include "usb.h"
+ 
+ static char *help = 
+ "***      zaurusd      ***\n"
+@@ -154,6 +155,22 @@ static int event_gpio_btn(struct evf_io_queue_memb *self)
+ 		closed_time = 0;
+ 	}
+ 	
++	if (ev.type == EV_SW && ev.code == 2 && ev.value == 1) {
++		enable_usb_client();
++	}
++
++	if (ev.type == EV_SW && ev.code == 2 && ev.value == 0) {
++		disable_usb_client();
++	}
++
++	if (ev.type == EV_SW && ev.code == 3 && ev.value == 1) {
++		enable_usb_host();
++	}
++
++	if (ev.type == EV_SW && ev.code == 3 && ev.value == 0) {
++		disable_usb_host();
++	}
++
+ 	return EVF_IO_QUEUE_OK;
+ }
+ 
+@@ -179,7 +196,7 @@ static int client_read(struct evf_io_queue_memb *self)
+ 	
+ 	/* update zaurusd configuration */
+ 	if ((proc = scmd_update(buf->buf, size + buf->pos, &config)) == -1) {
+-		msg_print(MSG_DBG, "zaurusd-clt exiting...");
++		msg_print(MSG_DBG, "zaurusd-ctl exiting...");
+ 		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
+ 	}
+ 
+@@ -268,7 +285,7 @@ int main(int argc, char *argv[])
+ {
+ 	int save_time = 0;
+ 	int opt;
+-	int dameonize = 1;
++	int daemonize = 1;
+ 	int backlight_is_off = 0;
+ 	time_t before_select;
+ 	struct evf_io_queue *queue;
+@@ -281,7 +298,7 @@ int main(int argc, char *argv[])
+ 				print_help(EXIT_SUCCESS);
+ 			break;
+ 			case 'd':
+-				dameonize = 0;
++				daemonize = 0;
+ 			break;
+ 			case 't':
+ 				save_time = 1;
+@@ -303,7 +320,7 @@ int main(int argc, char *argv[])
+ 	add_input(GPIO_BTN_DEV, queue, event_gpio_btn);
+ 	create_socket(queue);
+ 
+-	if (dameonize) {
++	if (daemonize) {
+ 		daemon(0, 0);
+ 		msg_set_output(MSG_SYSLOG);
+ 	}
+@@ -314,6 +331,7 @@ int main(int argc, char *argv[])
+ 	if (pid_save())
+ 		exit(EXIT_FAILURE);
+ 	
++	usb_init();
+ 
+ 	for (;;) {
+ 		static struct timeval tv;

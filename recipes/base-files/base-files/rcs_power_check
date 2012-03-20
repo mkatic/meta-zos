@@ -1,0 +1,11 @@
+#!/bin/sh
+
+BLFILE=/var/volatile/brightness
+POWER=$(cat /proc/apm | cut -d ' ' -f 7 | sed s/**%//)
+
+if [ ${POWER} -lt '50' ]; then
+	echo 1 > /sys/class/backlight/corgi_bl/brightness
+	touch /var/volatile/brightness
+	echo $POWER > $BLFILE
+fi
+

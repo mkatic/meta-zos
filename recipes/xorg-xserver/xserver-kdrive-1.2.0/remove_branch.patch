@@ -1,0 +1,21 @@
+diff --git a/fb/fbpict.c b/fb/fbpict.c
+index 656048d..6116690 100644
+--- a/fb/fbpict.c
++++ b/fb/fbpict.c
+@@ -333,14 +333,8 @@ fbCompositeSolidMask_nx8x0565 (CARD8      op,
+ 	    m = *mask++;
+ 	    if (m == 0xff)
+ 	    {
+-		if (srca == 0xff)
+-		    d = src;
+-		else
+-		{
+-		    d = *dst;
+-		    d = fbOver24 (src, cvt0565to8888(d));
+-		}
+-		*dst = cvt8888to0565(d);
++		 d = src;
++		 *dst = cvt8888to0565(d);
+ 	    }
+ 	    else if (m)
+ 	    {

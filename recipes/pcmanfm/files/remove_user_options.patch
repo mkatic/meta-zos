@@ -1,0 +1,266 @@
+Index: pcmanfm-mod-1.2.3/src/main-window.c
+===================================================================
+--- pcmanfm-mod-1.2.3.orig/src/main-window.c	2012-03-09 22:28:34.000000000 +0100
++++ pcmanfm-mod-1.2.3/src/main-window.c	2012-03-09 22:28:34.000000000 +0100
+@@ -48,16 +48,6 @@
+ #include "vfs-utils.h"  /* for vfs_sudo() */
+ #include "go-dialog.h"
+ 
+-
+-static void on_user_command_6 ( GtkMenuItem *menuitem,
+-                                        gpointer user_data );  //MOD
+-static void on_user_command_7 ( GtkMenuItem *menuitem,
+-                                        gpointer user_data );  //MOD
+-static void on_user_command_8 ( GtkMenuItem *menuitem,
+-                                        gpointer user_data );  //MOD
+-static void on_user_command_9 ( GtkMenuItem *menuitem,
+-                                        gpointer user_data );  //MOD
+-
+ static void fm_main_window_class_init( FMMainWindowClass* klass );
+ static void fm_main_window_init( FMMainWindow* main_window );
+ static void fm_main_window_finalize( GObject *obj );
+@@ -427,12 +417,6 @@
+                            on_open_current_folder_as_root, 0, 0 ),
+         PTK_IMG_MENU_ITEM( N_( "_Find Files" ), GTK_STOCK_FIND, on_find_file_activate, GDK_F3, 0 ),
+         PTK_IMG_MENU_ITEM( N_( "Run Command..." ), GTK_STOCK_EXECUTE, on_run_command, GDK_r, GDK_CONTROL_MASK ),   //MOD added
+-        PTK_SEPARATOR_MENU_ITEM,
+-        PTK_IMG_MENU_ITEM( N_( "User Open Files" ), GTK_STOCK_EXECUTE, on_open_files_activate, GDK_F4, 0 ),   //MOD renamed
+-        PTK_IMG_MENU_ITEM( N_( "User Command 6" ), GTK_STOCK_EXECUTE, on_user_command_6, GDK_F6, 0 ), //MOD
+-        PTK_IMG_MENU_ITEM( N_( "User Command 7" ), GTK_STOCK_EXECUTE, on_user_command_7, GDK_F7, 0 ), //MOD
+-        PTK_IMG_MENU_ITEM( N_( "User Command 8" ), GTK_STOCK_EXECUTE, on_user_command_8, GDK_F8, 0 ), //MOD
+-        PTK_IMG_MENU_ITEM( N_( "User Command 9" ), GTK_STOCK_EXECUTE, on_user_command_9, GDK_F9, 0 ), //MOD
+         PTK_MENU_END
+     };
+ 
+@@ -620,52 +604,6 @@
+     fm_menu_bar[ 3 ].ret = &main_window->bookmarks;
+     fm_menu_bar[ 4 ].ret = &view_menu_item;
+ 
+-
+-    //MOD  get user command names
+-    char* name;  //MOD
+-    char* app_desktop;  //MOD
+-    VFSAppDesktop* app_vfs = NULL;  //MOD
+-    int i;   //MOD
+-    
+-    for ( i = 5; i < 10; i++ )
+-    {
+-        switch ( i )
+-        {
+-            case 5:
+-                app_desktop = "pcmanfm-user-f4.desktop";    
+-                break;
+-            case 6:
+-                app_desktop = "pcmanfm-user-f6.desktop";    
+-                break;
+-            case 7:
+-                app_desktop = "pcmanfm-user-f7.desktop";    
+-                break;
+-            case 8:
+-                app_desktop = "pcmanfm-user-f8.desktop";    
+-                break;
+-            case 9:
+-                app_desktop = "pcmanfm-user-f9.desktop";    
+-                break;
+-        }
+-        app_vfs = vfs_app_desktop_new( app_desktop );
+-        if ( app_vfs )
+-        {
+-            name = vfs_app_desktop_get_disp_name( app_vfs );
+-            if ( strcmp (name, app_desktop ) && vfs_app_desktop_get_exec( app_vfs ) )
+-            {
+-                fm_tool_menu[ i ].label = g_filename_display_basename( name );
+-                fm_tool_menu[ i ].stock_icon = GTK_STOCK_EXECUTE;
+-            }
+-            else
+-            {
+-                fm_tool_menu[ i ].label = NULL;
+-                fm_tool_menu[ i ].stock_icon = GTK_STOCK_CANCEL;
+-        	}
+-            vfs_app_desktop_unref( app_vfs );
+-        }
+-    }
+-
+-
+     ptk_menu_add_items_from_data( main_window->menu_bar, fm_menu_bar,
+                                   main_window, main_window->accel_group );
+     /* This accel_group is useless and just used to show
+@@ -1933,34 +1871,6 @@
+     ptk_file_browser_run_command( file_browser );   
+ }                                        
+                                         
+-void on_user_command_6 ( GtkMenuItem *menuitem, gpointer user_data )  //MOD
+-{
+-    FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
+-    PtkFileBrowser* file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
+-    ptk_file_browser_open_files( file_browser, "/F6" );
+-}
+-
+-void on_user_command_7 ( GtkMenuItem *menuitem, gpointer user_data )  //MOD
+-{
+-    FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
+-    PtkFileBrowser* file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
+-    ptk_file_browser_open_files( file_browser, "/F7" );
+-}
+-
+-void on_user_command_8 ( GtkMenuItem *menuitem, gpointer user_data )  //MOD
+-{
+-    FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
+-    PtkFileBrowser* file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
+-    ptk_file_browser_open_files( file_browser, "/F8" );
+-}
+-
+-void on_user_command_9 ( GtkMenuItem *menuitem, gpointer user_data )  //MOD
+-{
+-    FMMainWindow * main_window = FM_MAIN_WINDOW( user_data );
+-    PtkFileBrowser* file_browser = PTK_FILE_BROWSER( fm_main_window_get_current_file_browser( main_window ) );
+-    ptk_file_browser_open_files( file_browser, "/F9" );
+-}
+-
+ void on_find_file_activate ( GtkMenuItem *menuitem,
+                                       gpointer user_data )
+ {
+Index: pcmanfm-mod-1.2.3/src/ptk/ptk-file-menu.c
+===================================================================
+--- pcmanfm-mod-1.2.3.orig/src/ptk/ptk-file-menu.c	2011-05-05 20:40:29.000000000 +0200
++++ pcmanfm-mod-1.2.3/src/ptk/ptk-file-menu.c	2012-03-09 22:51:52.000000000 +0100
+@@ -120,15 +120,6 @@
+                                PtkFileMenu* data );  //MOD
+ static void on_popup_run_command( GtkMenuItem *menuitem,
+                                PtkFileMenu* data );  //MOD
+-static void on_popup_user_6 ( GtkMenuItem *menuitem,
+-                                        PtkFileMenu* data );  //MOD
+-static void on_popup_user_7 ( GtkMenuItem *menuitem,
+-                                        PtkFileMenu* data );  //MOD
+-static void on_popup_user_8 ( GtkMenuItem *menuitem,
+-                                        PtkFileMenu* data );  //MOD
+-static void on_popup_user_9 ( GtkMenuItem *menuitem,
+-                                        PtkFileMenu* data );  //MOD
+-
+ 
+ static PtkMenuItemEntry create_new_menu[] =
+     {
+@@ -299,92 +290,6 @@
+ 
+     ptk_menu_add_items_from_data( popup, basic_popup_menu, data, data->accel_group );
+     gtk_widget_show_all( GTK_WIDGET( popup ) );
+-
+-    //MOD  add user commands
+-    seperator = gtk_separator_menu_item_new ();
+-    gtk_widget_show( seperator );
+-    gtk_menu_shell_insert( GTK_MENU_SHELL( popup ), seperator, 12 + 4 + dir_bump );
+-    for ( i = 12; i < 17; i++ )
+-    {
+-        switch ( i )
+-        {
+-            case 12:
+-                app_desktop = "pcmanfm-user-f4.desktop";
+-                key = GDK_F4;
+-                break;
+-            case 13:
+-                app_desktop = "pcmanfm-user-f6.desktop";    
+-                key = GDK_F6;
+-                break;
+-            case 14:
+-                app_desktop = "pcmanfm-user-f7.desktop";    
+-                key = GDK_F7;
+-                break;
+-            case 15:
+-                app_desktop = "pcmanfm-user-f8.desktop";    
+-                key = GDK_F8;
+-                break;
+-            case 16:
+-                app_desktop = "pcmanfm-user-f9.desktop";    
+-                key = GDK_F9;
+-                break;
+-        }
+-        app_vfs = vfs_app_desktop_new( app_desktop );
+-        if ( app_vfs )
+-        {
+-            name = vfs_app_desktop_get_disp_name( app_vfs );
+-            if ( strcmp (name, app_desktop ) && vfs_app_desktop_get_exec( app_vfs ) )
+-            {
+-                // name
+-                app_menu_item = gtk_image_menu_item_new_with_mnemonic ( name );
+-                
+-                // icon
+-                g_object_set_data_full( G_OBJECT( app_menu_item ), "app_vfs",
+-                                        app_vfs, vfs_app_desktop_unref );
+-                gtk_icon_size_lookup_for_settings( gtk_settings_get_default(),
+-                                                   GTK_ICON_SIZE_MENU,
+-                                                   &icon_w, &icon_h );
+-                app_icon = vfs_app_desktop_get_icon( app_vfs,
+-                                                     icon_w > icon_h ? icon_w : icon_h, TRUE );
+-                if ( ! app_icon )
+-                    app_img = gtk_image_new_from_stock( GTK_STOCK_EXECUTE, GTK_ICON_SIZE_MENU );
+-                else
+-                {
+-                    app_img = gtk_image_new_from_pixbuf( app_icon );
+-                    gdk_pixbuf_unref( app_icon );
+-                }
+-                if ( app_img )
+-                    gtk_image_menu_item_set_image ( GTK_IMAGE_MENU_ITEM( app_menu_item ), app_img );
+-
+-                // key
+-                gtk_widget_add_accelerator ( app_menu_item, "activate", data->accel_group,
+-                                    key, 0, GTK_ACCEL_VISIBLE);
+-                                    
+-                // insert in menu
+-                gtk_widget_show( app_menu_item );
+-                switch ( i )
+-                {
+-                    case 12:
+-                        g_signal_connect( app_menu_item, "activate", G_CALLBACK( on_popup_open_files_activate ), data  );
+-                        break;
+-                    case 13:
+-                        g_signal_connect( app_menu_item, "activate", G_CALLBACK( on_popup_user_6 ), data );
+-                        break;
+-                    case 14:
+-                        g_signal_connect( app_menu_item, "activate", G_CALLBACK( on_popup_user_7 ), data );
+-                        break;
+-                    case 15:
+-                        g_signal_connect( app_menu_item, "activate", G_CALLBACK( on_popup_user_8 ), data );
+-                        break;
+-                    case 16:
+-                        g_signal_connect( app_menu_item, "activate", G_CALLBACK( on_popup_user_9 ), data );
+-                        break;
+-                }
+-                gtk_menu_shell_insert( GTK_MENU_SHELL( popup ), app_menu_item, i + 5 + dir_bump );
+-            }
+-        }
+-    }
+-
+     
+ /* FIXME: read/write access of ALL selected files should be tested        //MOD
+  *        symlinks should not be followed when testing for delete, cut, rename */
+@@ -708,30 +613,6 @@
+     ptk_file_browser_open_files( data->browser, NULL );  //MOD F4
+ }
+ 
+-void on_popup_user_6( GtkMenuItem *menuitem,
+-                                         PtkFileMenu* data )
+-{
+-    ptk_file_browser_open_files( data->browser, "/F6" );  //MOD
+-}
+-
+-void on_popup_user_7( GtkMenuItem *menuitem,
+-                                         PtkFileMenu* data )
+-{
+-    ptk_file_browser_open_files( data->browser, "/F7" );  //MOD
+-}
+-
+-void on_popup_user_8( GtkMenuItem *menuitem,
+-                                         PtkFileMenu* data )
+-{
+-    ptk_file_browser_open_files( data->browser, "/F8" );  //MOD
+-}
+-
+-void on_popup_user_9( GtkMenuItem *menuitem,
+-                                         PtkFileMenu* data )
+-{
+-    ptk_file_browser_open_files( data->browser, "/F9" );  //MOD
+-}
+-
+ void on_popup_open_in_new_win_activate( GtkMenuItem *menuitem,
+                                         PtkFileMenu* data )
+ {

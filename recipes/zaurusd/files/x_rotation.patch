@@ -1,0 +1,203 @@
+diff --git a/config.h.in b/config.h.in
+index 99ee711..fc0a13f 100644
+--- a/config.h.in
++++ b/config.h.in
+@@ -61,6 +61,9 @@
+ /* enable usb switching */
+ #undef HAVE_USB_SWITCHING
+ 
++/* enable Kdrive rotation */
++#undef HAVE_X_ROTATION
++
+ /* Define to 1 if the system has the type `_Bool'. */
+ #undef HAVE__BOOL
+ 
+diff --git a/configure.ac b/configure.ac
+index 3ead630..8e27f8e 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -10,10 +10,23 @@ AC_CONFIG_HEADERS([config.h])
+ AC_PROG_CC
+ AC_PROG_INSTALL
+ 
++#optional features
++AC_ARG_ENABLE([usb-switching], [--enable-usb-switching	Add support for host/client usb switching], [usb_switching=${enableval}], [usb_switching=no])
++AS_IF([test "x$usb_switching" == "xyes"], [AC_DEFINE([HAVE_USB_SWITCHING], [1], [enable usb switching])])
++
++AC_ARG_ENABLE([kdrive-rotation], [--enable-kdrive-rotation  Add support for Kdrive screen rotation], [kdrive_rotation=${enableval}], [kdrive_rotation=no])
++AS_IF([test "x$kdrive_rotation" == "xyes"], [AC_DEFINE([HAVE_X_ROTATION], [1], [enable Kdrive rotation])])
++#
+ # Checks for libraries.
+ evfilter=no
+ AC_SEARCH_LIBS([evf_io_queue_add], [evfilter], [evfilter=yes])
+ AS_IF([test "x$evfilter" != "xyes"], [AC_MSG_ERROR([evfilter library not found.])])
++	
++AS_IF([test "x$kdrive_rotation" == "xyes"], [AC_SEARCH_LIBS([XOpenDisplay], [X11], [libx11=yes])])
++AS_IF([test "x$libx11" == "xno"], [AC_MSG_ERROR([Xlib library not found.])])
++
++AS_IF([test "x$kdrive_rotation" == "xyes"], [AC_SEARCH_LIBS([XRRSetScreenConfig], [Xrandr], [xrandr=yes])])
++AS_IF([test "x$xrandr" == "xno"], [AC_MSG_ERROR([Xrandr library not found.])])
+ 
+ # Checks for header files.
+ AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h sys/socket.h syslog.h unistd.h])
+@@ -22,11 +35,7 @@ evfilter_h=no
+ AC_CHECK_HEADER(evfilter/evfilter.h, [evfilter_h=yes])
+ AS_IF([test "x$evfilter_h" != "xyes"], [AC_MSG_ERROR([evfilter.h header not found.])])
+ 
+-#optional features
+-
+-AC_ARG_ENABLE([usb-switching], [--enable-usb-switching	Add support for host/client usb switching], [usb_switching=${enableval}], [usb_switching=no])
+-AS_IF([test "x$usb_switching" == "xyes"], [AC_DEFINE([HAVE_USB_SWITCHING], [1], [enable usb switching])])
+-# Checks for typedefs, structures, and compiler characteristics.
++ Checks for typedefs, structures, and compiler characteristics.
+ AC_HEADER_STDBOOL
+ AC_TYPE_PID_T
+ AC_TYPE_UINT16_T
+@@ -41,4 +50,6 @@ AC_OUTPUT
+ 
+ echo ""
+ echo ""
+-echo "usb host/client switching: ${usb_switching}"
++echo "Selected options:"
++echo "Usb host/client switching: ${usb_switching}"
++echo "Kdrive rotation: ${kdrive_rotation}"
+diff --git a/src/Makefile.in b/src/Makefile.in
+index e9438a3..af24edd 100644
+--- a/src/Makefile.in
++++ b/src/Makefile.in
+@@ -11,6 +11,7 @@ sysconfdir = ${DESTDIR}@sysconfdir@
+ OBJECTS=pidfile.o backlight.o power.o time.o zaurusd.o msg.o\
+         socket.o socket_cmd.o lcd.o sysfs.o display.o
+ OBJECTS += usb.o
++OBJECTS += x_rotation.o
+ 
+ CTL_OBJECTS=zaurusd-ctl.o msg.o socket.o
+ 
+@@ -58,3 +59,4 @@ zaurusd-ctl.o: zaurusd-ctl.c msg.h config.h socket.h socket_cmd.h
+ zaurusd.o: zaurusd.c config.h backlight.h display.h power.h time.h \
+   pidfile.h socket.h msg.h socket_cmd.h
+ usb.o: usb.c usb.h
++x_rotation.o: x_rotation.c x_rotation.h
+diff --git a/src/x_rotation.c b/src/x_rotation.c
+new file mode 100644
+index 0000000..5edb6fd
+--- /dev/null
++++ b/src/x_rotation.c
+@@ -0,0 +1,68 @@
++/*
++ * x_rotation.c
++ *
++ *  Created on: Feb 24, 2012
++ *      Author: Marko Katić dromede@gmail.com
++ */
++
++#include <stdio.h>
++#include <string.h>
++#include <stdlib.h>
++#include <X11/Xlib.h>
++#include <X11/extensions/Xrandr.h>
++#include "x_rotation.h"
++
++#ifdef HAVE_X_ROTATION
++
++void x_rotate (int rotation) {
++
++Display * dpy;
++int screen, nsize;
++int current_width, current_height;
++XRRScreenConfiguration * sc;
++XRRScreenSize * sizes;
++Rotation current_rotation, new_rotation;
++Status status;
++
++dpy = XOpenDisplay (":0");
++
++if ( dpy == NULL )
++  return;
++
++screen = DefaultScreen ( dpy );
++Window root = RootWindow ( dpy, screen );
++
++int eventbase ;
++int errorbase ;
++XRRQueryExtension (dpy, &eventbase, &errorbase);
++
++sc = XRRGetScreenInfo (dpy, root);
++   if (sc == NULL)
++	   return;
++sizes = XRRConfigSizes(sc, &nsize);
++XRRRotations (dpy, screen, &current_rotation); /*get current rotation */
++current_width = DisplayWidth (dpy, screen);
++current_height = DisplayHeight(dpy, screen);
++
++if (rotation == PORTRAIT ) {
++if (current_width == 640 && current_height == 480 && current_rotation == RR_Rotate_270) /*landscape set by xrandr */
++	new_rotation = RR_Rotate_0;
++
++else if (current_width == 640 && current_height == 480 && current_rotation == RR_Rotate_0) /*landscape set by -screen arg */
++	new_rotation = RR_Rotate_90;
++
++}
++if (rotation == LANDSCAPE) {
++if (current_width == 480 && current_height == 640 && current_rotation == RR_Rotate_0) /*default portrait */
++	new_rotation = RR_Rotate_270;
++
++else if (current_width == 480 && current_height == 640 && current_rotation == RR_Rotate_90) /* portrait set by xrandr */
++	new_rotation = RR_Rotate_0;
++
++}
++
++status = XRRSetScreenConfig (dpy, sc, DefaultRootWindow (dpy), (SizeID) 0, new_rotation, CurrentTime);
++
++XCloseDisplay(dpy);
++}
++#endif
+diff --git a/src/x_rotation.h b/src/x_rotation.h
+new file mode 100644
+index 0000000..fff42c2
+--- /dev/null
++++ b/src/x_rotation.h
+@@ -0,0 +1,15 @@
++
++#ifndef X_ROTATION_H_
++#define X_ROTATION_H_
++
++#include "../config.h"
++
++enum { PORTRAIT, LANDSCAPE };
++
++#ifdef HAVE_X_ROTATION
++void x_rotate(int);
++#else
++#define x_rotate(a)
++#endif
++
++#endif /* X_ROTATION_H_ */
+diff --git a/src/zaurusd.c b/src/zaurusd.c
+index eeb10ff..5367a96 100644
+--- a/src/zaurusd.c
++++ b/src/zaurusd.c
+@@ -43,6 +43,7 @@
+ #include "msg.h"
+ #include "socket_cmd.h"
+ #include "usb.h"
++#include "x_rotation.h"
+ 
+ static char *help = 
+ "***      zaurusd      ***\n"
+@@ -143,6 +144,7 @@ static int event_gpio_btn(struct evf_io_queue_memb *self)
+ 	
+ 	if (ev.type == EV_SW && ev.code == 1 && ev.value == 1) {
+ 		closed = 1;
++		x_rotate(PORTRAIT);
+ 	}
+ 
+ 	if (ev.type == EV_SW && ev.code == 0 && ev.value == 0) {
+@@ -153,6 +155,7 @@ static int event_gpio_btn(struct evf_io_queue_memb *self)
+ 	if (ev.type == EV_SW && ev.code == 1 && ev.value == 0) {
+ 		closed = 0;
+ 		closed_time = 0;
++		x_rotate(LANDSCAPE);
+ 	}
+ 	
+ 	if (ev.type == EV_SW && ev.code == 2 && ev.value == 1) {

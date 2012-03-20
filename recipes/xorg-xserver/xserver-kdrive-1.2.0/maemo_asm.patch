@@ -1,0 +1,3935 @@
+diff --git a/fb/Makefile.am b/fb/Makefile.am
+index 11b2d2f..5d4d3c8 100644
+--- a/fb/Makefile.am
++++ b/fb/Makefile.am
+@@ -50,6 +50,9 @@ libfb_la_SOURCES = 	\
+ 	fbline.c	\
+ 	fboverlay.c	\
+ 	fboverlay.h	\
++	fbarmv6.c	\
++	fbarmv6.h	\
++	fbarmv6_internal.h \
+ 	fbpict.c	\
+ 	fbpict.h	\
+ 	fbpixmap.c	\
+diff --git a/fb/fb.h b/fb/fb.h
+index 198c860..95c3841 100644
+--- a/fb/fb.h
++++ b/fb/fb.h
+@@ -2050,5 +2050,12 @@ fbFillRegionTiled (DrawablePtr	pDrawable,
+ void
+ fbPaintWindow(WindowPtr pWin, RegionPtr pRegion, int what);
+ 
++/*Zaurus specific macro's */
++
++#define WRITE(ptr, val) (*(ptr) = (val))
++#define READ(ptr) (*(ptr))
++
++#define MEMCPY_WRAPPED(dst, src, size) fbmemcpy_arm((dst), (src), (size))
++#define MEMMOVE_WRAPPED(dst, src, size) fbmemcpy_arm((dst), (src), (size))
+ 
+ #endif /* _FB_H_ */
+diff --git a/fb/fbarmv6.c b/fb/fbarmv6.c
+new file mode 100644
+index 0000000..ce95b8e
+--- /dev/null
++++ b/fb/fbarmv6.c
+@@ -0,0 +1,301 @@
++/*
++ * Copyright © 2008 Nokia Corporation
++ *
++ * Permission to use, copy, modify, distribute and sell this software and its
++ * documentation for any purpose is hereby granted without fee, provided that
++ * the above copyright notice appear in all copies and that both that
++ * copyright notice and this permission notice appear in supporting
++ * documentation, and that the names of the authors and/or copyright holders
++ * not be used in advertising or publicity pertaining to distribution of the
++ * software without specific, written prior permission.  The authors and
++ * copyright holders make no representations about the suitability of this
++ * software for any purpose.  It is provided "as is" without any express
++ * or implied warranty.
++ *
++ * THE AUTHORS AND COPYRIGHT HOLDERS DISCLAIM ALL WARRANTIES WITH REGARD TO
++ * THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
++ * FITNESS, IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
++ * ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER
++ * RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF
++ * CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ *
++ * Author: Siarhei Siamashka <siarhei.siamashka@nokia.com>
++ *
++ * Portions based on fbpict.c
++ */
++ 
++#include "fbarmv6.h"
++#include "fb.h"
++#include "fbpict.h"
++
++#include "fbarmv6_internal.h"
++
++void fbCompositeSolidMask_nx8x0565_armv6 (FbComposeData *params)
++{
++    CARD32  src, srca;
++    CARD16  *dstLine, *dst;
++    CARD8   *maskLine, *mask;
++    FbStride    dstStride, maskStride;
++    CARD16  w, h;
++
++    fbComposeGetSolid(params->src, src, params->dest->format);
++
++    srca = src >> 24;
++    if (src == 0)
++    return;
++
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
++                       dstStride, dstLine, 1);
++    fbComposeGetStart (params->mask, params->xMask, params->yMask, CARD8,
++                       maskStride, maskLine, 1);
++
++    dst = dstLine;
++    mask = maskLine;
++    h = params->height;
++    w = params->width;
++
++    fbCompositeSolidMask_nx8x0565_internal_armv6(dst, mask, src, w,
++                                                 dstStride - w, maskStride - w, h);
++
++}
++
++void fbCompositeSrcAdd_8000x8000_armv6 (FbComposeData *params)
++{
++    CARD8   *dstLine, *dst;
++    CARD8   *srcLine, *src;
++    FbStride    dstStride, srcStride;
++    CARD16  w, h;
++
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD8,
++                       srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD8,
++                       dstStride, dstLine, 1);
++
++    dst = dstLine;
++    src = srcLine;
++    h = params->height;
++    w = params->width;
++
++    fbCompositeSrcAdd_8000x8000_internal_armv6(dst, src, w, dstStride, srcStride, h);
++
++}
++
++void fbComposite_x8r8g8b8_src_r5g6b5_armv6 (FbComposeData *params)
++{
++    CARD16	*dstLine, *dst;
++    CARD32	*srcLine, *src;
++    FbStride	dstStride, srcStride;
++    CARD16	w, h;
++
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
++                       srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
++                       dstStride, dstLine, 1);
++
++    dst = dstLine;
++    src = srcLine;
++    h = params->height;
++    w = params->width;
++
++    if (w < 7)
++        fbComposite_x8r8g8b8_src_r5g6b5_internal_mixed_armv6_c(dst, src, w, dstStride, srcStride, h);
++    else
++        fbComposite_x8r8g8b8_src_r5g6b5_internal_armv6(dst, src, w, dstStride, srcStride, h);
++
++}
++
++void __attribute__((naked)) fbmemcpy_arm(void *dst, void *src, int w)
++{
++    asm volatile(
++        /**
++        * Helper macro for memcpy function, it can copy data from source (r1) to 
++        * destination (r0) buffers fixing alignment in the process. Destination
++        * buffer should be aligned already (4 bytes alignment is required.
++        * Size of the block to copy is in r2 register
++        */
++        ".macro  UNALIGNED_MEMCPY shift\n"
++        "        sub     r1, #(\\shift)\n"
++        "        ldr     ip, [r1], #4\n"
++
++        "        tst     r0, #4\n"
++        "        movne   r3, ip, lsr #(\\shift * 8)\n"
++        "        ldrne   ip, [r1], #4\n"
++        "        subne   r2, r2, #4\n"
++        "        orrne   r3, r3, ip, asl #(32 - \\shift * 8)\n"
++        "        strne   r3, [r0], #4\n"
++
++        "        tst     r0, #8\n"
++        "        movne   r3, ip, lsr #(\\shift * 8)\n"
++        "        ldmneia r1!, {r4, ip}\n"
++        "        subne   r2, r2, #8\n"
++        "        orrne   r3, r3, r4, asl #(32 - \\shift * 8)\n"
++        "        movne   r4, r4, lsr #(\\shift * 8)\n"
++        "        orrne   r4, r4, ip, asl #(32 - \\shift * 8)\n"
++        "        stmneia r0!, {r3-r4}\n"
++        "        cmp     r2, #32\n"
++        "        blt     3f\n"
++        "        pld     [r1, #48]\n"
++        "        stmfd   sp!, {r7, r8, r10, r11}\n"
++        "1:\n"
++        "        pld     [r1, #80]\n"
++        "        subs    r2, r2, #32\n"
++        "        movge   r3, ip, lsr #(\\shift * 8)\n"
++        "        ldmgeia r1!, {r4-r6, r7, r8, r10, r11, ip}\n"
++        "        orrge   r3, r3, r4, asl #(32 - \\shift * 8)\n"
++        "        movge   r4, r4, lsr #(\\shift * 8)\n"
++        "        orrge   r4, r4, r5, asl #(32 - \\shift * 8)\n"
++        "        movge   r5, r5, lsr #(\\shift * 8)\n"
++        "        orrge   r5, r5, r6, asl #(32 - \\shift * 8)\n"
++        "        movge   r6, r6, lsr #(\\shift * 8)\n"
++        "        orrge   r6, r6, r7, asl #(32 - \\shift * 8)\n"
++        "        stmgeia r0!, {r3-r6}\n"
++        "        movge   r7, r7, lsr #(\\shift * 8)\n"
++        "        orrge   r7, r7, r8, asl #(32 - \\shift * 8)\n"
++        "        movge   r8, r8, lsr #(\\shift * 8)\n"
++        "        orrge   r8, r8, r10, asl #(32 - \\shift * 8)\n"
++        "        movge   r10, r10, lsr #(\\shift * 8)\n"
++        "        orrge   r10, r10, r11, asl #(32 - \\shift * 8)\n"
++        "        movge   r11, r11, lsr #(\\shift * 8)\n"
++        "        orrge   r11, r11, ip, asl #(32 - \\shift * 8)\n"
++        "        stmgeia r0!, {r7, r8, r10, r11}\n"
++        "        bgt     1b\n"
++        "2:\n"
++        "        ldmfd   sp!, {r7, r8, r10, r11}\n"
++        "3:\n"   /* copy remaining data */
++        "        tst     r2, #16\n"
++        "        movne   r3, ip, lsr #(\\shift * 8)\n"
++        "        ldmneia r1!, {r4-r6, ip}\n"
++        "        orrne   r3, r3, r4, asl #(32 - \\shift * 8)\n"
++        "        movne   r4, r4, lsr #(\\shift * 8)\n"
++        "        orrne   r4, r4, r5, asl #(32 - \\shift * 8)\n"
++        "        movge   r5, r5, lsr #(\\shift * 8)\n"
++        "        orrge   r5, r5, r6, asl #(32 - \\shift * 8)\n"
++        "        movge   r6, r6, lsr #(\\shift * 8)\n"
++        "        orrge   r6, r6, ip, asl #(32 - \\shift * 8)\n"
++        "        stmneia r0!, {r3-r6}\n"
++
++        "        tst     r2, #8\n"
++        "        movne   r3, ip, lsr #(\\shift * 8)\n"
++        "        ldmneia r1!, {r4, ip}\n"
++        "        orrne   r3, r3, r4, asl #(32 - \\shift * 8)\n"
++        "        movne   r4, r4, lsr #(\\shift * 8)\n"
++        "        orrne   r4, r4, ip, asl #(32 - \\shift * 8)\n"
++        "        stmneia r0!, {r3-r4}\n"
++
++        "        tst     r2, #4\n"
++        "        movne   r3, ip, lsr #(\\shift * 8)\n"
++        "        ldrne   ip, [r1], #4\n"
++        "        sub     r1, r1, #(4 - \\shift)\n"
++        "        orrne   r3, r3, ip, asl #(32 - \\shift * 8)\n"
++        "        strne   r3, [r0], #4\n"
++
++        "        tst     r2, #2\n"
++        "        ldrneb  r3, [r1], #1\n"
++        "        ldrneb  r4, [r1], #1\n"
++        "        ldr     r5, [sp], #4\n"
++        "        strneb  r3, [r0], #1\n"
++        "        strneb  r4, [r0], #1\n"
++
++        "        tst     r2, #1\n"
++        "        ldrneb  r3, [r1], #1\n"
++        "        ldr     r6, [sp], #4\n"
++        "        strneb  r3, [r0], #1\n"
++
++        "        ldmfd   sp!, {r0, r4}\n"
++
++        "        bx      lr\n"
++        ".endm\n"
++
++        "    cmp     r2, #20\n"
++        "    blt     9f\n"
++             /* copy data until destination address is 4 bytes aligned */
++        "    tst     r0, #1\n"
++        "    ldrneb  r3, [r1], #1\n"
++        "    stmfd   sp!, {r0, r4}\n"
++        "    subne   r2, r2, #1\n"
++        "    strneb  r3, [r0], #1\n"
++        "    tst     r0, #2\n"
++        "    ldrneb  r3, [r1], #1\n"
++        "    ldrneb  r4, [r1], #1\n"
++        "    stmfd   sp!, {r5, r6}\n"
++        "    subne   r2, r2, #2\n"
++        "    orrne   r3, r3, r4, asl #8\n"
++        "    strneh  r3, [r0], #2\n"
++             /* destination address is 4 bytes aligned */
++             /* now we should handle 4 cases of source address alignment */
++        "    tst     r1, #1\n"
++        "    bne     6f\n"
++        "    tst     r1, #2\n"
++        "    bne     7f\n"
++
++             /* both source and destination are 4 bytes aligned */
++        "    stmfd   sp!, {r7, r8, r10, r11}\n"
++        "    tst     r0, #4\n"
++        "    ldrne   r4, [r1], #4\n"
++        "    subne   r2, r2, #4\n"
++        "    strne   r4, [r0], #4\n"
++        "    tst     r0, #8\n"
++        "    ldmneia r1!, {r3-r4}\n"
++        "    subne   r2, r2, #8\n"
++        "    stmneia r0!, {r3-r4}\n"
++    "1:\n"
++        "    subs    r2, r2, #32\n"
++        "    ldmgeia r1!, {r3-r6, r7, r8, r10, r11}\n"
++        "    pld     [r1, #48]\n"
++        "    stmgeia r0!, {r3-r6}\n"
++        "    stmgeia r0!, {r7, r8, r10, r11}\n"
++        "    bgt     1b\n"
++    "2:\n"
++        "    ldmfd   sp!, {r7, r8, r10, r11}\n"
++        "    tst     r2, #16\n"
++        "    ldmneia r1!, {r3-r6}\n"
++        "    stmneia r0!, {r3-r6}\n"
++        "    tst     r2, #8\n"
++        "    ldmneia r1!, {r3-r4}\n"
++        "    stmneia r0!, {r3-r4}\n"
++        "    tst     r2, #4\n"
++        "    ldrne   r3, [r1], #4\n"
++        "    mov     ip, r0\n"
++        "    strne   r3, [ip], #4\n"
++        "    tst     r2, #2\n"
++        "    ldrneh  r3, [r1], #2\n"
++        "    ldmfd   sp!, {r5, r6}\n"
++        "    strneh  r3, [ip], #2\n"
++        "    tst     r2, #1\n"
++        "    ldrneb  r3, [r1], #1\n"
++        "    ldmfd   sp!, {r0, r4}\n"
++        "    strneb  r3, [ip], #1\n"
++
++        "    bx      lr\n"
++
++    "6:\n"
++        "    tst    r1, #2\n"
++        "    bne    8f\n"
++        "    UNALIGNED_MEMCPY 1\n"
++    "7:\n"
++        "    UNALIGNED_MEMCPY 2\n"
++    "8:\n"
++        "    UNALIGNED_MEMCPY 3\n"
++    "9:\n"
++        "    stmfd  sp!, {r0, r4}\n"
++    "1:      subs   r2, r2, #3\n"
++        "    ldrgeb ip, [r0]\n"
++        "    ldrgeb r3, [r1], #1\n"
++        "    ldrgeb r4, [r1], #1\n"
++        "    ldrgeb ip, [r1], #1\n"
++        "    strgeb r3, [r0], #1\n"
++        "    strgeb r4, [r0], #1\n"
++        "    strgeb ip, [r0], #1\n"
++        "    bge    1b\n"
++        "    adds   r2, r2, #2\n"
++        "    ldrgeb r3, [r1], #1\n"
++        "    mov    ip, r0\n"
++        "    ldr    r0, [sp], #4\n"
++        "    strgeb r3, [ip], #1\n"
++        "    ldrgtb r3, [r1], #1\n"
++        "    ldr    r4, [sp], #4\n"
++        "    strgtb r3, [ip], #1\n"
++        "    bx     lr\n"
++    );
++}
+diff --git a/fb/fbarmv6.h b/fb/fbarmv6.h
+new file mode 100644
+index 0000000..9be6883
+--- /dev/null
++++ b/fb/fbarmv6.h
+@@ -0,0 +1,90 @@
++/*
++ * Copyright © 2008 Nokia Corporation
++ *
++ * Permission to use, copy, modify, distribute and sell this software and its
++ * documentation for any purpose is hereby granted without fee, provided that
++ * the above copyright notice appear in all copies and that both that
++ * copyright notice and this permission notice appear in supporting
++ * documentation, and that the names of the authors and/or copyright holders
++ * not be used in advertising or publicity pertaining to distribution of the
++ * software without specific, written prior permission.  The authors and
++ * copyright holders make no representations about the suitability of this
++ * software for any purpose.  It is provided "as is" without any express
++ * or implied warranty.
++ *
++ * THE AUTHORS AND COPYRIGHT HOLDERS DISCLAIM ALL WARRANTIES WITH REGARD TO
++ * THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
++ * FITNESS, IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
++ * ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER
++ * RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF
++ * CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ *
++ * Author: Siarhei Siamashka <siarhei.siamashka@nokia.com>
++ *
++ * Portions based on fbpict.c
++ */
++
++#ifndef _FBARMV6_H_
++#define _FBARMV6_H_
++
++#define USE_ARMV6
++#endif
++
++#ifdef USE_ARMV6
++
++#define FbByteMulAdd_store_r5g6b5_armv6(x, a, y) do {                         \
++        unsigned int t = ((x & 0xff00ff) * a) + 0x800080;                     \
++        x = (((x >> 8) & 0xff) * a) + 0x80;                                   \
++        t = (t + ((t >> 8) & 0xff00ff));                                      \
++        x = (x + ((x >> 8)));                                                 \
++        asm(".arch iwmmxt\n\t"	\
++        	".cpu iwmmxt\n\t"	\
++			"tmcrr wr0, %1, %2\n\t" 										  \
++        	"wunpckehuw wr1, wr0\n\t"                                          \
++        	"waddbus wr2, wr0, wr1\n\t"	                                      \
++    		"textrmsw %0, wr0, #0\n\t"											  \
++			: "=r" (t)                                                        \
++			: "r" (t), "r" (y << 8)											  \
++			);       					              						  \
++		asm(".arch iwmmxt\n\t"	\
++			".cpu iwmmxt\n\t"	\
++			"tmcrr wr0, %1, %2\n\t" 										  \
++        	"wunpckehuw wr1, wr0\n\t"                                          \
++        	"waddbus wr2, wr0, wr1\n\t"	                                      \
++    		"textrmsw %0, wr0, #0\n\t"											  \
++			: "=r" (x)                                                        \
++			: "r" (x), "r" (y)												  \
++			);       					              						  \
++        x = ((t >> (3 + 8)) & 0x001F)                                         \
++                | ((t >> (8 + 8)) & 0xF800) | ((x >> 5) & 0x07E0);            \
++    } while (0)
++
++#define FbByteMulAdd_store_x8r8g8b8_armv6(x, a, y) do {                       \
++        unsigned int t = ((x & 0xff00ff) * a) + 0x800080;                     \
++        x = (((x >> 8) & 0xff) * a) + 0x80;                                   \
++        t = (t + ((t >> 8) & 0xff00ff));                                      \
++        x = (x + ((x >> 8)));                                                 \
++        t = (t >> 8) & 0xff00ff;                                              \
++        x &= 0xff00;                                                          \
++        x += t;                                                               \
++        asm(".arch iwmmxt\n\t" \
++        	".cpu iwmmxt\n\t" \
++			"tmcrr wr0, %1, %2\n\t" 										  \
++        	"wunpckehuw wr1, wr0\n\t"                                          \
++        	"waddbus wr2, wr0, wr1\n\t"	                                      \
++    		"textrmsw %0, wr0, #0\n\t"											  \
++			: "=r" (x)                                                        \
++			: "r" (x), "r" (y & 0xffffff)									  \
++			);  														      \
++    } while (0)
++
++#endif
++
++struct _FbComposeData;
++
++void fbCompositeSolidMask_nx8x0565_armv6 (struct _FbComposeData *params);
++void fbCompositeSrcAdd_8000x8000_armv6 (struct _FbComposeData *params);
++void fbComposite_x8r8g8b8_src_r5g6b5_armv6 (struct _FbComposeData *params);
++
++void fbmemcpy_arm(void *dst, void *src, int w);
+diff --git a/fb/fbarmv6_internal.h b/fb/fbarmv6_internal.h
+new file mode 100644
+index 0000000..84517f7
+--- /dev/null
++++ b/fb/fbarmv6_internal.h
+@@ -0,0 +1,740 @@
++/*
++ * Copyright © 2008 Nokia Corporation
++ *
++ * Permission to use, copy, modify, distribute and sell this software and its
++ * documentation for any purpose is hereby granted without fee, provided that
++ * the above copyright notice appear in all copies and that both that
++ * copyright notice and this permission notice appear in supporting
++ * documentation, and that the names of the authors and/or copyright holders
++ * not be used in advertising or publicity pertaining to distribution of the
++ * software without specific, written prior permission.  The authors and
++ * copyright holders make no representations about the suitability of this
++ * software for any purpose.  It is provided "as is" without any express
++ * or implied warranty.
++ *
++ * THE AUTHORS AND COPYRIGHT HOLDERS DISCLAIM ALL WARRANTIES WITH REGARD TO
++ * THIS SOFTWARE, INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
++ * FITNESS, IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
++ * ANY SPECIAL, INDIRECT OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER
++ * RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF
++ * CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
++ * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ *
++ * Author: Siarhei Siamashka <siarhei.siamashka@nokia.com>
++ *
++ * Portions based on fbpict.c
++ */
++
++#ifndef _FBARMV6_INTERNAL_H_
++#define _FBARMV6_INTERNAL_H_
++
++#include <stdint.h>
++#define USE_ARMV6
++#ifdef USE_ARMV6
++
++static inline uint32_t iwmmxt_wadd8(uint32_t a, uint32_t b)
++{
++    uint32_t result;
++    asm (
++    	".arch iwmmxt\n\t"
++    	".cpu iwmmxt\n\t"
++    	"tmcrr wr0, r0, r1\n\t"
++        "wunpckehuw wr1, wr0\n\t"
++        "waddbus wr2, wr0, wr1\n\t"
++    	"textrmsw %0, wr2, #0\n\t"
++    	: "=r" (result)
++    );
++    return result;
++}
++#endif
++
++/*
++ * A 'reference' C code of optimized 'fbCompositeSolidMask_nx8x0565' function, the use
++ * of assembly is minimal (restricted to the use of 'uqadd8' instruction only).
++ * 
++ * Note: 'dst_stride_delta' and 'mask_stride_delta' are not strides, but need
++ *       be initialized with 'stride - width'
++ */
++static inline void fbCompositeSolidMask_nx8x0565_internal_mixed_armv6_c_helper(
++    uint16_t *dst, uint8_t *mask, uint32_t src, int w,
++    int dst_stride_delta, int mask_stride_delta, int h, const int opaquesrc)
++{
++    int backup_w = w;
++    uint8_t a;
++    uint32_t tmp1, tmp2, tmp3, tmp4, d;
++    register const uint32_t unpacked_src_20 = src & 0x00FF00FF;
++    register const uint32_t unpacked_src_31 = (src >> 8) & 0x00FF00FF;
++    register const uint16_t src16 = ((src >> 3) & 0x001F) | ((src >> 5) & 0x07E0) | ((src >> 8) & 0xF800);
++    while (--h >= 0)
++    {
++        while (--w >= 0)
++        {
++            a = *mask++;
++
++            if (a == 0) { dst++; continue; }
++
++            if (opaquesrc && a == 0xFF) { *dst++ = src16; continue; }
++
++            tmp1 = unpacked_src_20 * a + 0x800080;
++            tmp2 = unpacked_src_31 * a + 0x800080;
++            d = *dst;
++            tmp1 += (tmp1 & 0xFF00FFFF) >> 8;
++            tmp2 += (tmp2 & 0xFF00FFFF) >> 8;
++
++            a = ~tmp2 >> 24;
++
++            tmp3 = (((d) << 3) & 0xF8) | (((d) << 8) & 0xF80000);
++            tmp3 |= ((tmp3 >> 5) & 0x70007);
++
++            tmp4 = (((d) >> 3) & 0xFC);
++            tmp4 |= (tmp4 >> 6) & 0x3;
++
++            tmp3 *= a;
++            tmp4 *= a;
++            tmp3 += 0x800080;
++            tmp4 += 0x800080;
++            tmp3 += (tmp3 & 0xFF00FFFF) >> 8;
++            tmp4 += (tmp4 & 0xFF00FFFF) >> 8;
++
++            tmp1 = iwmmxt_wadd8(tmp1, tmp3);
++            tmp2 = iwmmxt_wadd8(tmp2, tmp4);
++
++            d = ((tmp1 >> (3 + 8)) & 0x001F);
++            d |= ((tmp1 >> (8 + 8)) & 0xF800);
++            d |= (tmp2 >> 5) & 0x07E0;
++
++            *dst++ = d;
++        }
++        w = backup_w;
++        dst += dst_stride_delta;
++        mask += mask_stride_delta;
++    }
++}
++
++static inline void fbCompositeSolidMask_nx8x0565_internal_mixed_armv6_c(
++    uint16_t *dst, uint8_t *mask, uint32_t src, int w,
++    int dst_stride_delta, int mask_stride_delta, int h)
++{
++    if ((src >> 24) == 0xFF)
++        fbCompositeSolidMask_nx8x0565_internal_mixed_armv6_c_helper(dst, mask, src, w,
++            dst_stride_delta, mask_stride_delta, h, 1);
++    else
++        fbCompositeSolidMask_nx8x0565_internal_mixed_armv6_c_helper(dst, mask, src, w,
++            dst_stride_delta, mask_stride_delta, h, 0);
++}
++
++#if defined(__ARM_EABI__) && defined(__linux__)
++/*
++ * ARMv6 assembly optimized version of 'fbCompositeSolidMask_nx8x0565'. It is
++ * a bare metal 'naked' function which uses all the available CPU registers and
++ * is compatible with ARM EABI. It might (or might not) break when used with a
++ * different ABI, anyway better be safe than sorry.
++ */
++static void __attribute__((naked)) fbCompositeSolidMask_nx8x0565_internal_armv6(
++    uint16_t *dst, uint8_t *mask, uint32_t src, int w,
++    int dst_stride_delta, int mask_stride_delta, int h)
++{
++    asm volatile(
++    		".arch iwmmxt\n"
++    		".cpu iwmmxt\n"
++        ".macro fbCompositeSolidMask_nx8x0565_internal_armv6_asm opaque_flag\n"
++            /* save all registers (8 words) to stack */
++            "stmdb   sp!, {r4-r11, ip, lr}\n" 
++            /* some register aliases for better readability */
++            "DST     .req  r0\n"
++            "MASK    .req  r1\n"
++            "S       .req  r2\n"
++            "W       .req  r3\n"
++            "A       .req  r8\n"
++            "D       .req  r10\n"
++            "C0000FF .req  r11\n"
++            "C00001F .req  r9\n"
++            "C800080 .req  ip\n"
++            "CE000E0 .req  lr\n"
++            /* precalculate some stuff and put it on stack */
++            "mov     r6, #0xF8\n"
++            "mov     r7, #0xFC\n"
++
++            "str     W, [sp, #-8]!\n"
++
++            ".if \\opaque_flag\n"
++                /* ((src >> 3) & 0x001F) | ((src >> 5) & 0x07E0) | ((src >> 8) & 0xF800) */
++                /* precalculate and save it to stack for later use */
++                "mov     A, #0x1F\n"
++                "and     D, A, S, lsr #3\n"
++                "and     r4, S, #0xF80000\n"
++                "and     r5, S, #0xFC00\n"
++                "orr     D, r4, lsr #8\n"
++                "orr     D, r5, lsr #5\n"
++                "str     D, [sp, #4]\n"
++            ".endif\n"
++
++            "ldr     D, [sp, #(8 + 10*4 + 8)]\n" /* h */
++            "ldr     A, =0xFF00FF\n"
++            "ldr     C800080, =0x800080\n"
++            "ldr     CE000E0, =0xE000E0\n"
++            "ldr     C0000FF, =0xFF\n"
++            "ldr     C00001F, =0x1F\n"
++            "and     r4, A, S\n"           /* r4 = src & 0x00FF00FF */
++            "and     r5, A, S, lsr #8\n"   /* r5 = (src >> 8) & 0x00FF00FF */
++            "stmdb   sp!, {r4, r5, r6, r7}\n"
++        "0:\n"
++            "subs    D, D, #1\n"
++            "blt     6f\n"
++        "1:\n"
++            "subs    W, W, #1\n"
++            "blt     5f\n"
++        "2:\n"
++            "ldrb    A, [MASK], #1\n"
++            "ldmia   sp, {r4, r5, r6, r7}\n" /* load a set of constants from stack */
++            "add     DST, DST, #2\n"
++            "cmp     A, #0\n"
++            "beq     1b\n"
++
++            ".if \\opaque_flag\n"
++                "cmp     A, #0xFF\n"
++                "bne     3f\n"
++                "ldr     D, [sp, #(4*4 + 4)]\n" /* load precalculated value */
++                "subs    W, #1\n"
++                "strh    D, [DST, #-2]\n"
++                "bge     2b\n"
++            ".endif\n"
++
++        "3:\n"
++            "ldrh    D, [DST, #-2]\n"
++            "mla     r4, A, r4, C800080\n"
++            "mla     r5, A, r5, C800080\n"
++            "and     r6, r6, D, lsl #3\n" /* & 0xF8 */
++            "and     r7, r7, D, lsr #3\n" /* & 0xFC */
++            "and     D, D, #0xF800\n"
++            "bic     S, r4, #0xFF0000\n"
++            "bic     A, r5, #0xFF0000\n"
++            "add     r4, r4, S, lsr #8\n"
++            "add     r5, r5, A, lsr #8\n"
++
++            "and     S, r7, #0xC0\n"
++            "orr     r6, r6, D, lsl #8\n"
++            "and     D, r6, CE000E0\n"
++            "eor     A, C0000FF, r5, lsr #24\n"
++            "orr     r6, D, lsr #5\n"
++            "orr     r7, S, lsr #6\n"
++
++            "mla     r6, A, r6, C800080\n"
++            "mla     r7, A, r7, C800080\n"
++            "subs    W, #1\n"
++            "bic     D, r6, #0xFF0000\n"
++            "bic     A, r7, #0xFF0000\n"
++            "add     r6, r6, D, lsr #8\n"
++            /*iwmmxt uqadd8 substitute code start */
++               "tmcrr	 wr0, r4, r6\n"
++               "wunpckehuw wr1, wr0\n"
++               "waddbus wr2, wr0, wr1\n"
++               "textrmsw r4, wr2, #0\n"
++            /* "uqadd8  r4, r4, r6\n" */
++               "add     r7, r7, A, lsr #8\n"
++               "tmcrr	 wr0, r5, r7\n"
++               "wunpckehuw wr1, wr0\n"
++               "waddbus wr2, wr0, wr1\n"
++               "textrmsw r5, wr2, #0\n"
++            /* "uqadd8  r5, r5, r7\n" */
++            /*iwmmxt uqadd8 substitute code end */
++            "and     D, C00001F, r4, lsr #11\n"
++            "and     r4, r4, #0xF8000000\n"
++            "and     r5, r5, #0xFC00\n"
++            "orr     D, r4, lsr #16\n"
++            "orr     D, r5, lsr #5\n"
++            "strh    D, [DST, #-2]\n"
++            "bge     2b\n"
++        "5:\n"
++            "ldr     r6, [sp, #(4*4 + 8 + 10*4 + 8)]\n" /* h */
++            "ldr     r4, [sp, #(4*4 + 8 + 10*4 + 4)]\n" /* mask stride */
++            "ldr     r5, [sp, #(4*4 + 8 + 10*4 + 0)]\n" /* dst stride */
++            "ldr     W, [sp, #(4*4)]\n"
++            "subs    r6, r6, #1\n" /* h */
++            "str     r6, [sp, #(4*4 + 8 + 10*4 + 8)]\n" /* h */
++            "add     MASK, MASK, r4\n"
++            "add     DST, DST, r5, lsl #1\n"
++            "bgt     1b\n"
++        "6:\n"
++            "add     sp, sp, #(4*4 + 8)\n"
++            "ldmia   sp!, {r4-r11, ip, pc}\n" /* restore all registers and return */
++            ".unreq DST\n"
++            ".unreq MASK\n"
++            ".unreq S\n"
++            ".unreq W\n"
++            ".unreq A\n"
++            ".unreq D\n"
++            ".unreq C0000FF\n"
++            ".unreq C00001F\n"
++            ".unreq C800080\n"
++            ".unreq CE000E0\n"
++        ".endm\n"
++
++        "mov     ip, r2, lsr #24\n"
++        "cmp     ip, #0xFF\n"
++        "beq     9f\n"
++        "fbCompositeSolidMask_nx8x0565_internal_armv6_asm 0\n"
++    "9:\n"
++        "fbCompositeSolidMask_nx8x0565_internal_armv6_asm 1\n"
++        ".ltorg\n"
++    );
++}
++
++#else
++
++#define fbCompositeSolidMask_nx8x0565_internal_armv6(a, b, c, d, e, f, g) \
++    fbCompositeSolidMask_nx8x0565_internal_mixed_armv6_c((a), (b), (c), (d), (e), (f), (g))
++
++#endif
++
++/**
++ * A 'reference' C code of optimized 'fbCompositeSrcAdd_8000x8000' function, the 
++ * use of assembly is minimal (restricted to the use of 'uqadd8' instruction only).
++ *
++ * Code is implemented by processing two rows simultaneously for better handling 
++ * of the common use cases (operations with fonts glyphs) where width is quite small
++ * (typically only 6-13 pixels).
++ */
++static inline void fbCompositeSrcAdd_8000x8000_internal_mixed_armv6_c(
++    uint8_t *dst, uint8_t *src, int w, int dst_stride,
++    int src_stride, int h)
++{
++    int backup_w = w;
++    uint32_t s1, s2, d1, d2;
++
++    /* process two rows at once */
++    while ((h -= 2) >= 0)
++    {
++        w = backup_w;
++        if (w >= 3)
++        {
++            if ((uintptr_t)dst & 1)
++            {
++                s1 = *(uint8_t *)(src + src_stride);
++                s2 = *(uint8_t *)src;
++                src += 1;
++                d1 = *(uint8_t *)(dst + dst_stride);
++                d2 = *(uint8_t *)dst;
++                d1 = iwmmxt_wadd8(d1, s1);
++                d2 = iwmmxt_wadd8(d2, s2);
++                *(uint8_t *)(dst + dst_stride) = d1;
++                *(uint8_t *)(dst) = d2;
++                dst += 1;
++                w -= 1;
++            }
++            if ((uintptr_t)dst & 2)
++            {
++                s1 = *(uint16_t *)(src + src_stride);
++                s2 = *(uint16_t *)src;
++                src += 2;
++                d1 = *(uint16_t *)(dst + dst_stride);
++                d2 = *(uint16_t *)dst;
++                d1 = iwmmxt_wadd8(d1, s1);
++                d2 = iwmmxt_wadd8(d2, s2);
++                *(uint16_t *)(dst + dst_stride) = d1;
++                *(uint16_t *)(dst) = d2;
++                dst += 2;
++                w -= 2;
++            }
++        }
++
++        while ((w -= 4) >= 0)
++        {
++            s1 = *(uint32_t *)(src + src_stride);
++            s2 = *(uint32_t *)src;
++            src += 4;
++            d1 = *(uint32_t *)(dst + dst_stride);
++            d2 = *(uint32_t *)dst;
++            d1 = iwmmxt_wadd8(d1, s1);
++            d2 = iwmmxt_wadd8(d2, s2);
++            *(uint32_t *)(dst + dst_stride) = d1;
++            *(uint32_t *)(dst) = d2;
++            dst += 4;
++        }
++
++        if (w & 2)
++        {
++            s1 = *(uint16_t *)(src + src_stride);
++            s2 = *(uint16_t *)src;
++            src += 2;
++            d1 = *(uint16_t *)(dst + dst_stride);
++            d2 = *(uint16_t *)dst;
++            d1 = iwmmxt_wadd8(d1, s1);
++            d2 = iwmmxt_wadd8(d2, s2);
++            *(uint16_t *)(dst + dst_stride) = d1;
++            *(uint16_t *)(dst) = d2;
++            dst += 2;
++        }
++        if (w & 1)
++        {
++            s1 = *(uint8_t *)(src + src_stride);
++            s2 = *(uint8_t *)src;
++            src += 1;
++            d1 = *(uint8_t *)(dst + dst_stride);
++            d2 = *(uint8_t *)dst;
++            d1 = iwmmxt_wadd8(d1, s1);
++            d2 = iwmmxt_wadd8(d2, s2);
++            *(uint8_t *)(dst + dst_stride) = d1;
++            *(uint8_t *)(dst) = d2;
++            dst += 1;
++        }
++
++        src += src_stride * 2 - backup_w;
++        dst += dst_stride * 2 - backup_w;
++    }
++
++    /* process the last remaining row if needed */
++    if (h == -1)
++    {
++        w = backup_w;
++        if (w >= 3)
++        {
++            if ((uintptr_t)dst & 1)
++            {
++                s2 = *(uint8_t *)src;
++                src += 1;
++                d2 = *(uint8_t *)dst;
++                d2 = iwmmxt_wadd8(d2, s2);
++                *(uint8_t *)(dst) = d2;
++                dst += 1;
++                w -= 1;
++            }
++            if ((uintptr_t)dst & 2)
++            {
++                s2 = *(uint16_t *)src;
++                src += 2;
++                d2 = *(uint16_t *)dst;
++                d2 = iwmmxt_wadd8(d2, s2);
++                *(uint16_t *)(dst) = d2;
++                dst += 2;
++                w -= 2;
++            }
++        }
++
++        while ((w -= 4) >= 0)
++        {
++            s2 = *(uint32_t *)src;
++            src += 4;
++            d2 = *(uint32_t *)dst;
++            d2 = iwmmxt_wadd8(d2, s2);
++            *(uint32_t *)(dst) = d2;
++            dst += 4;
++        }
++
++        if (w & 2)
++        {
++            s2 = *(uint16_t *)src;
++            src += 2;
++            d2 = *(uint16_t *)dst;
++            d2 = iwmmxt_wadd8(d2, s2);
++            *(uint16_t *)(dst) = d2;
++            dst += 2;
++        }
++        if (w & 1)
++        {
++            s2 = *(uint8_t *)src;
++            src += 1;
++            d2 = *(uint8_t *)dst;
++            d2 = iwmmxt_wadd8(d2, s2);
++            *(uint8_t *)(dst) = d2;
++            dst += 1;
++        }
++    }
++}
++
++/**
++ * Conversion x8r8g8b8 -> r5g6b5
++ *
++ * TODO: implement an fully ARMv6 assembly optimized version of this function
++ */
++#define fbCompositeSrcAdd_8000x8000_internal_armv6(a, b, c, d, e, f) \
++    fbCompositeSrcAdd_8000x8000_internal_mixed_armv6_c((a), (b), (c), (d), (e), (f))
++
++static inline void fbComposite_x8r8g8b8_src_r5g6b5_internal_c(
++    uint16_t *dst, uint32_t *src, int w, int dst_stride,
++    int src_stride, int h)
++{
++    uint32_t a, b, s;
++    int backup_w = w;
++    while (h--)
++    {
++        w = backup_w;
++        while (w--)
++        {
++            s = *src++;
++
++            a = (s >> 3) & 0x1F001F;
++            b = s & 0xFC00;
++            a |= a >> 5;
++            a |= b >> 5;
++
++            *dst++ = a;
++        }
++        src += src_stride - backup_w;
++        dst += dst_stride - backup_w;
++    }
++}
++
++/**
++ * Conversion x8r8g8b8 -> r5g6b5
++ *
++ * TODO: optimize more, eliminate stalls, try to use burst writes (4 words aligned 
++ * at 16 byte boundary)
++ */
++static inline void fbComposite_x8r8g8b8_src_r5g6b5_internal_mixed_armv6_c(
++    uint16_t *dst, uint32_t *src, int w, int dst_stride,
++    int src_stride, int h)
++{
++    uint32_t a, x, y, c1F001F = 0x1F001F;
++    int backup_w = w;
++    while (h--)
++    {
++        w = backup_w;
++        if (w > 0 && (uintptr_t)dst & 2)
++        {
++            x = *src++;
++
++            a = (x >> 3) & c1F001F;
++            x &= 0xFC00;
++            a |= a >> 5;
++            a |= x >> 5;
++
++            *dst++ = a;
++            w--;
++        }
++
++        asm volatile(
++        	".arch iwmmxt\n"
++        	".cpu iwmmxt\n"
++            "subs  %[w], %[w], #2\n"
++            "blt   2f\n"
++        "1:\n"
++            "ldr   %[x], [%[src]], #4\n"
++            "ldr   %[y], [%[src]], #4\n"
++            "subs  %[w], %[w], #2\n"
++            
++            "and   %[a], %[c1F001F], %[x], lsr #3\n"
++            "and   %[x], %[x], #0xFC00\n\n"
++            "orr   %[a], %[a], %[a], lsr #5\n"
++            "orr   %[x], %[a], %[x], lsr #5\n"
++
++            "and   %[a], %[c1F001F], %[y], lsr #3\n"
++            "and   %[y], %[y], #0xFC00\n\n"
++            "orr   %[a], %[a], %[a], lsr #5\n"
++            "orr   %[y], %[a], %[y], lsr #5\n"
++        	/* pkhbt iwmmxt replacement code start */
++        	"tinsrh wr0, %[x], #0\n"
++        	"tinsrh wr0, %[y], #1\n"
++        	"textrmsw %[x], wr0, #0\n"
++            /* "pkhbt %[x], %[x], %[y], lsl #16\n" */
++        	/* pkhbt iwmmxt replacement code end */
++            "str   %[x], [%[dst]], #4\n"
++            "bge   1b\n"
++        "2:\n"
++        : [c1F001F] "+&r" (c1F001F), [src] "+&r" (src), [dst] "+&r" (dst), [a] "=&r" (a), 
++          [x] "=&r" (x), [y] "=&r" (y), [w] "+&r" (w)
++        );
++
++        if (w & 1)
++        {
++            x = *src++;
++
++            a = (x >> 3) & c1F001F;
++            x = x & 0xFC00;
++            a |= a >> 5;
++            a |= x >> 5;
++
++            *dst++ = a;
++        }
++
++        src += src_stride - backup_w;
++        dst += dst_stride - backup_w;
++    }
++}
++
++#if defined(__ARMEL__) && defined(__ARM_EABI__) && defined(__linux__)
++
++/**
++ * Conversion x8r8g8b8 -> r5g6b5
++ *
++ * Note: 'w' must be >= 7
++ */
++static void __attribute__((naked)) fbComposite_x8r8g8b8_src_r5g6b5_internal_armv6(
++    uint16_t *dst, uint32_t *src, int w, int dst_stride,
++    int src_stride, int h)
++{
++    asm volatile(
++    	".arch iwmmxt\n"
++    	".cpu iwmmxt\n"
++        /* define supplementary macros */
++        ".macro cvt8888to565 PIX\n"
++            "and   A, C1F001F, \\PIX, lsr #3\n"
++            "and   \\PIX, \\PIX, #0xFC00\n\n"
++            "orr   A, A, A, lsr #5\n"
++            "orr   \\PIX, A, \\PIX, lsr #5\n"
++        ".endm\n"
++
++        ".macro combine_pixels_pair PIX1, PIX2\n"
++        	/* pkhbt iwmmxt replacement code start */
++        	"tinsrh wr0, \\PIX1, #0\n"
++        	"tinsrh wr0, \\PIX2, #1\n"
++        	"textrmsw \\PIX1, wr0, #0\n"
++            /*"pkhbt \\PIX1, \\PIX1, \\PIX2, lsl #16\n" */
++        	/* pkhbt iwmmxt replacement code end */
++        ".endm\n"
++
++        /* function entry, save all registers (10 words) to stack */
++        "stmdb   sp!, {r4-r11, ip, lr}\n"
++        
++        /* define some aliases */
++        "DST     .req  r0\n"
++        "SRC     .req  r1\n"
++        "W       .req  r2\n"
++        "H       .req  r3\n"
++
++        "TMP1    .req  r4\n"
++        "TMP2    .req  r5\n"
++        "TMP3    .req  r6\n"
++        "TMP4    .req  r7\n"
++        "TMP5    .req  r8\n"
++        "TMP6    .req  r9\n"
++        "TMP7    .req  r10\n"
++        "TMP8    .req  r11\n"
++
++        "C1F001F .req  ip\n"
++        "A       .req  lr\n"
++        
++        "ldr     TMP1, [sp, #(10*4+0)]\n" /* load src_stride */
++        "ldr     C1F001F, =0x1F001F\n"
++        "sub     r3, r3, W\n"
++        "str     r3, [sp, #(10*4+0)]\n" /* store (dst_stride-w) */
++        "ldr     r3, [sp, #(10*4+4)]\n" /* load h */
++        "sub     TMP1, TMP1, W\n"
++        "str     TMP1, [sp, #(10*4+4)]\n" /* store (src_stride-w) */
++        
++        "str     W, [sp, #(8*4)]\n" /* saved ip = W */
++
++    "0:\n"
++        "subs    H, H, #1\n"
++        "blt     6f\n"
++    "1:\n"
++        /* align DST at 4 byte boundary */
++        "tst     DST, #2\n"
++        "beq     2f\n"
++        "ldr     TMP1, [SRC], #4\n"
++        "sub     W, W, #1\n"
++        "cvt8888to565 TMP1\n"
++        "strh    TMP1, [DST], #2\n"
++    "2:"
++        /* align DST at 8 byte boundary */
++        "tst     DST, #4\n"
++        "beq     2f\n"
++        "ldmia   SRC!, {TMP1, TMP2}\n"
++        "sub     W, W, #2\n"
++        "cvt8888to565 TMP1\n"
++        "cvt8888to565 TMP2\n"
++        "combine_pixels_pair TMP1, TMP2\n"
++        "str     TMP1, [DST], #4\n"
++    "2:"
++        /* align DST at 16 byte boundary */
++        "tst     DST, #8\n"
++        "beq     2f\n"
++        "ldmia   SRC!, {TMP1, TMP2, TMP3, TMP4}\n"
++        "sub     W, W, #4\n"
++        "cvt8888to565 TMP1\n"
++        "cvt8888to565 TMP2\n"
++        "cvt8888to565 TMP3\n"
++        "cvt8888to565 TMP4\n"
++        "combine_pixels_pair TMP1, TMP2\n"
++        "combine_pixels_pair TMP3, TMP4\n"
++        "stmia DST!, {TMP1, TMP3}\n"
++    "2:"
++        /* inner loop, process 8 pixels per iteration */
++        "subs    W, W, #8\n"
++        "blt     4f\n"
++    "3:\n"
++        "ldmia   SRC!, {TMP1, TMP2, TMP3, TMP4, TMP5, TMP6, TMP7, TMP8}\n"
++        "subs    W, W, #8\n"
++        "cvt8888to565 TMP1\n"
++        "cvt8888to565 TMP2\n"
++        "cvt8888to565 TMP3\n"
++        "cvt8888to565 TMP4\n"
++        "cvt8888to565 TMP5\n"
++        "cvt8888to565 TMP6\n"
++        "cvt8888to565 TMP7\n"
++        "cvt8888to565 TMP8\n"
++        "combine_pixels_pair TMP1, TMP2\n"
++        "combine_pixels_pair TMP3, TMP4\n"
++        "combine_pixels_pair TMP5, TMP6\n"
++        "combine_pixels_pair TMP7, TMP8\n"
++        "stmia   DST!, {TMP1, TMP3, TMP5, TMP7}\n"
++        "bge     3b\n"
++    "4:\n"
++
++        /* process the remaining pixels */
++        "tst     W, #4\n"
++        "beq     4f\n"
++        "ldmia   SRC!, {TMP1, TMP2, TMP3, TMP4}\n"
++        "cvt8888to565 TMP1\n"
++        "cvt8888to565 TMP2\n"
++        "cvt8888to565 TMP3\n"
++        "cvt8888to565 TMP4\n"
++        "combine_pixels_pair TMP1, TMP2\n"
++        "combine_pixels_pair TMP3, TMP4\n"
++        "stmia   DST!, {TMP1, TMP3}\n"
++    "4:\n"
++        "tst     W, #2\n"
++        "beq     4f\n"
++        "ldmia   SRC!, {TMP1, TMP2}\n"
++        "cvt8888to565 TMP1\n"
++        "cvt8888to565 TMP2\n"
++        "combine_pixels_pair TMP1, TMP2\n"
++        "str     TMP1, [DST], #4\n"
++    "4:\n"
++        "tst     W, #1\n"
++        "beq     4f\n"
++        "ldr     TMP1, [SRC], #4\n"
++        "cvt8888to565 TMP1\n"
++        "strh    TMP1, [DST], #2\n"
++    "4:\n"
++        "ldr     TMP1, [sp, #(10*4+0)]\n" /* (dst_stride-w) */
++        "ldr     TMP2, [sp, #(10*4+4)]\n" /* (src_stride-w) */
++        "ldr     W, [sp, #(8*4)]\n"
++        "subs    H, H, #1\n"
++        "add     DST, DST, TMP1, lsl #1\n"
++        "add     SRC, SRC, TMP2, lsl #2\n"
++        "bge     1b\n"
++    "6:\n"
++        "ldmia   sp!, {r4-r11, ip, pc}\n" /* restore all registers and return */
++        ".ltorg\n"
++
++        ".unreq   DST\n"
++        ".unreq   SRC\n"
++        ".unreq   W\n"
++        ".unreq   H\n"
++
++        ".unreq   TMP1\n"
++        ".unreq   TMP2\n"
++        ".unreq   TMP3\n"
++        ".unreq   TMP4\n"
++        ".unreq   TMP5\n"
++        ".unreq   TMP6\n"
++        ".unreq   TMP7\n"
++        ".unreq   TMP8\n"
++
++        ".unreq   C1F001F\n"
++        ".unreq   A\n"
++
++        ".purgem  cvt8888to565\n"
++        ".purgem  combine_pixels_pair\n"
++    );
++}
++
++#else
++
++#define fbComposite_x8r8g8b8_src_r5g6b5_internal_armv6(a, b, c, d, e, f) \
++    fbComposite_x8r8g8b8_src_r5g6b5_internal_mixed_armv6_c((a), (b), (c), (d), (e), (f))
++
++#endif
++
++#endif
+diff --git a/fb/fbblt.c b/fb/fbblt.c
+index d176a7c..8f5001e 100644
+--- a/fb/fbblt.c
++++ b/fb/fbblt.c
+@@ -92,10 +92,10 @@ fbBlt (FbBits   *srcLine,
+ 
+         if (!upsidedown)
+             for (i = 0; i < height; i++)
+-                memcpy(dst + i * dstStride, src + i * srcStride, width);
++            	MEMCPY_WRAPPED(dst + i * dstStride, src + i * srcStride, width);
+         else
+             for (i = height - 1; i >= 0; i--)
+-                memcpy(dst + i * dstStride, src + i * srcStride, width);
++            	MEMCPY_WRAPPED(dst + i * dstStride, src + i * srcStride, width);
+ 
+         return;
+     }
+diff --git a/fb/fbcompose.c b/fb/fbcompose.c
+index b1903e9..4a01463 100644
+--- a/fb/fbcompose.c
++++ b/fb/fbcompose.c
+@@ -3557,18 +3557,7 @@ fbCompositeRect (const FbComposeData *data, CARD32 *scanline_buffer)
+ }
+ 
+ void
+-fbCompositeGeneral (CARD8	op,
+-		    PicturePtr	pSrc,
+-		    PicturePtr	pMask,
+-		    PicturePtr	pDst,
+-		    INT16	xSrc,
+-		    INT16	ySrc,
+-		    INT16	xMask,
+-		    INT16	yMask,
+-		    INT16	xDst,
+-		    INT16	yDst,
+-		    CARD16	width,
+-		    CARD16	height)
++fbCompositeGeneral (FbComposeData *params)
+ {
+     RegionRec	    region;
+     int		    n;
+@@ -3576,94 +3565,96 @@ fbCompositeGeneral (CARD8	op,
+     Bool	    srcRepeat = FALSE;
+     Bool	    maskRepeat = FALSE;
+     int		    w, h;
++    FbComposeData   nparams;
+     CARD32 _scanline_buffer[SCANLINE_BUFFER_LENGTH*3];
+     CARD32 *scanline_buffer = _scanline_buffer;
+-    FbComposeData compose_data;
+     
+-    if (pSrc->pDrawable)
+-        srcRepeat = pSrc->repeatType == RepeatNormal && !pSrc->transform
+-                    && (pSrc->pDrawable->width != 1 || pSrc->pDrawable->height != 1);
+-
+-    if (pMask && pMask->pDrawable)
+-	maskRepeat = pMask->repeatType == RepeatNormal && !pMask->transform
+-                     && (pMask->pDrawable->width != 1 || pMask->pDrawable->height != 1);
+-
+-    if (op == PictOpOver && !pMask && !pSrc->transform && !PICT_FORMAT_A(pSrc->format) && !pSrc->alphaMap)
+-        op = PictOpSrc;
++    if (params->src->pDrawable)
++        srcRepeat = params->src->repeatType == RepeatNormal &&
++                    !params->src->transform &&
++                    (params->src->pDrawable->width != 1 ||
++                     params->src->pDrawable->height != 1);
++
++    if (params->mask && params->mask->pDrawable)
++	maskRepeat = params->mask->repeatType == RepeatNormal &&
++                     !params->mask->transform &&
++                     (params->mask->pDrawable->width != 1 ||
++                      params->mask->pDrawable->height != 1);
+ 
+     if (!miComputeCompositeRegion (&region,
+-				   pSrc,
+-				   pMask,
+-				   pDst,
+-				   xSrc,
+-				   ySrc,
+-				   xMask,
+-				   yMask,
+-				   xDst,
+-				   yDst,
+-				   width,
+-				   height))
++				   params->src,
++				   params->mask,
++				   params->dest,
++				   params->xSrc,
++				   params->ySrc,
++				   params->xMask,
++				   params->yMask,
++				   params->xDest,
++				   params->yDest,
++				   params->width,
++				   params->height))
+ 	    return;
+ 
+-    compose_data.op = op;
+-    compose_data.src = pSrc;
+-    compose_data.mask = pMask;
+-    compose_data.dest = pDst;
+-    if (width > SCANLINE_BUFFER_LENGTH)
+-        scanline_buffer = (CARD32 *) malloc(width * 3 * sizeof(CARD32));
++    memcpy(&nparams, params, sizeof(FbComposeData));
++    if (params->width > SCANLINE_BUFFER_LENGTH)
++        scanline_buffer = (CARD32 *) malloc(params->width * 3 * sizeof(CARD32));
++
++    if (params->op == PictOpOver && !params->mask && !params->src->transform &&
++        !PICT_FORMAT_A(params->src->format) && !params->src->alphaMap)
++        nparams.op = PictOpSrc;
+ 
+     n = REGION_NUM_RECTS (&region);
+     pbox = REGION_RECTS (&region);
+     while (n--)
+     {
+ 	h = pbox->y2 - pbox->y1;
+-	compose_data.ySrc = pbox->y1 - yDst + ySrc;
+-	compose_data.yMask = pbox->y1 - yDst + yMask;
+-	compose_data.yDest = pbox->y1;
++	nparams.ySrc = pbox->y1 - params->yDest + params->ySrc;
++	nparams.yMask = pbox->y1 - params->yDest + params->yMask;
++	nparams.yDest = pbox->y1;
+ 	while (h)
+ 	{
+-	    compose_data.height = h;
++	    nparams.height = h;
+ 	    w = pbox->x2 - pbox->x1;
+-	    compose_data.xSrc = pbox->x1 - xDst + xSrc;
+-	    compose_data.xMask = pbox->x1 - xDst + xMask;
+-	    compose_data.xDest = pbox->x1;
++	    nparams.xSrc = pbox->x1 - params->xDest + params->xSrc;
++	    nparams.xMask = pbox->x1 - params->xDest + params->xMask;
++	    nparams.xDest = pbox->x1;
+ 	    if (maskRepeat)
+ 	    {
+-		compose_data.yMask = mod (compose_data.yMask, pMask->pDrawable->height);
+-		if (compose_data.height > pMask->pDrawable->height - compose_data.yMask)
+-		    compose_data.height = pMask->pDrawable->height - compose_data.yMask;
++		nparams.yMask = mod (nparams.yMask, params->mask->pDrawable->height);
++		if (nparams.height > params->mask->pDrawable->height - nparams.yMask)
++		    nparams.height = params->mask->pDrawable->height - nparams.yMask;
+ 	    }
+ 	    if (srcRepeat)
+ 	    {
+-		compose_data.ySrc = mod (compose_data.ySrc, pSrc->pDrawable->height);
+-		if (compose_data.height > pSrc->pDrawable->height - compose_data.ySrc)
+-		    compose_data.height = pSrc->pDrawable->height - compose_data.ySrc;
++		nparams.ySrc = mod (nparams.ySrc, params->src->pDrawable->height);
++		if (nparams.height > params->src->pDrawable->height - nparams.ySrc)
++		    nparams.height = params->src->pDrawable->height - nparams.ySrc;
+ 	    }
+ 	    while (w)
+ 	    {
+-		compose_data.width = w;
++		nparams.width = w;
+ 		if (maskRepeat)
+ 		{
+-		    compose_data.xMask = mod (compose_data.xMask, pMask->pDrawable->width);
+-		    if (compose_data.width > pMask->pDrawable->width - compose_data.xMask)
+-			compose_data.width = pMask->pDrawable->width - compose_data.xMask;
++		    nparams.xMask = mod (nparams.xMask, params->mask->pDrawable->width);
++		    if (nparams.width > params->mask->pDrawable->width - nparams.xMask)
++			nparams.width = params->mask->pDrawable->width - nparams.xMask;
+ 		}
+ 		if (srcRepeat)
+ 		{
+-		    compose_data.xSrc = mod (compose_data.xSrc, pSrc->pDrawable->width);
+-		    if (compose_data.width > pSrc->pDrawable->width - compose_data.xSrc)
+-			compose_data.width = pSrc->pDrawable->width - compose_data.xSrc;
++		    nparams.xSrc = mod (nparams.xSrc, params->src->pDrawable->width);
++		    if (nparams.width > params->src->pDrawable->width - nparams.xSrc)
++			nparams.width = params->src->pDrawable->width - nparams.xSrc;
+ 		}
+-		fbCompositeRect(&compose_data, scanline_buffer);
+-		w -= compose_data.width;
+-		compose_data.xSrc += compose_data.width;
+-		compose_data.xMask += compose_data.width;
+-		compose_data.xDest += compose_data.width;
++		fbCompositeRect(&nparams, scanline_buffer);
++		w -= nparams.width;
++		nparams.xSrc += nparams.width;
++		nparams.xMask += nparams.width;
++		nparams.xDest += nparams.width;
+ 	    }
+-	    h -= compose_data.height;
+-	    compose_data.ySrc += compose_data.height;
+-	    compose_data.yMask += compose_data.height;
+-	    compose_data.yDest += compose_data.height;
++	    h -= nparams.height;
++	    nparams.ySrc += nparams.height;
++	    nparams.yMask += nparams.height;
++	    nparams.yDest += nparams.height;
+     }
+ 	pbox++;
+     }
+diff --git a/fb/fbpict.c b/fb/fbpict.c
+index 6116690..9364058 100644
+--- a/fb/fbpict.c
++++ b/fb/fbpict.c
+@@ -29,26 +29,14 @@
+ #include <string.h>
+ 
+ #include "fb.h"
+-
++#define USE_ARMV6
+ #ifdef RENDER
+ 
+ #include "picturestr.h"
+ #include "mipict.h"
+ #include "fbpict.h"
+ #include "fbmmx.h"
+-
+-typedef void	(*CompositeFunc) (CARD8      op,
+-				  PicturePtr pSrc,
+-				  PicturePtr pMask,
+-				  PicturePtr pDst,
+-				  INT16      xSrc,
+-				  INT16      ySrc,
+-				  INT16      xMask,
+-                                  INT16      yMask,
+-				  INT16      xDst,
+-				  INT16      yDst,
+-				  CARD16     width,
+-				  CARD16     height);
++#include "fbarmv6.h"
+ 
+ CARD32
+ fbOver (CARD32 x, CARD32 y)
+@@ -98,115 +86,102 @@ fbIn (CARD32 x, CARD8 y)
+  */
+ 
+ void
+-fbCompositeSolidMask_nx8x8888 (CARD8      op,
+-			       PicturePtr pSrc,
+-			       PicturePtr pMask,
+-			       PicturePtr pDst,
+-			       INT16      xSrc,
+-			       INT16      ySrc,
+-			       INT16      xMask,
+-			       INT16      yMask,
+-			       INT16      xDst,
+-			       INT16      yDst,
+-			       CARD16     width,
+-			       CARD16     height)
++fbCompositeSolidMask_nx8x8888 (FbComposeData *params)
+ {
+     CARD32	src, srca;
+     CARD32	*dstLine, *dst, d, dstMask;
+     CARD8	*maskLine, *mask, m;
+     FbStride	dstStride, maskStride;
+-    CARD16	w;
++    CARD16	w, h;
+ 
+-    fbComposeGetSolid(pSrc, src, pDst->format);
++    fbComposeGetSolid(params->src, src, params->dest->format);
+ 
+-    dstMask = FbFullMask (pDst->pDrawable->depth);
++    dstMask = FbFullMask (params->dest->pDrawable->depth);
+     srca = src >> 24;
+     if (src == 0)
+ 	return;
+ 
+-    fbComposeGetStart (pDst, xDst, yDst, CARD32, dstStride, dstLine, 1);
+-    fbComposeGetStart (pMask, xMask, yMask, CARD8, maskStride, maskLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD32,
++                       dstStride, dstLine, 1);
++    fbComposeGetStart (params->mask, params->xMask, params->yMask, CARD8,
++                       maskStride, maskLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	mask = maskLine;
+ 	maskLine += maskStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    m = *mask++;
++	    m = READ(mask++);
+ 	    if (m == 0xff)
+ 	    {
+ 		if (srca == 0xff)
+-		    *dst = src & dstMask;
++		    WRITE(dst, src & dstMask);
+ 		else
+-		    *dst = fbOver (src, *dst) & dstMask;
++		    WRITE(dst, fbOver (src, READ(dst)) & dstMask);
+ 	    }
+ 	    else if (m)
+ 	    {
+ 		d = fbIn (src, m);
+-		*dst = fbOver (d, *dst) & dstMask;
++		WRITE(dst, fbOver (d, READ(dst)) & dstMask);
+ 	    }
+ 	    dst++;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSolidMask_nx8888x8888C (CARD8      op,
+-				   PicturePtr pSrc,
+-				   PicturePtr pMask,
+-				   PicturePtr pDst,
+-				   INT16      xSrc,
+-				   INT16      ySrc,
+-				   INT16      xMask,
+-				   INT16      yMask,
+-				   INT16      xDst,
+-				   INT16      yDst,
+-				   CARD16     width,
+-				   CARD16     height)
++fbCompositeSolidMask_nx8888x8888C (FbComposeData *params)
+ {
+     CARD32	src, srca;
+     CARD32	*dstLine, *dst, d, dstMask;
+     CARD32	*maskLine, *mask, ma;
+     FbStride	dstStride, maskStride;
+-    CARD16	w;
++    CARD16	w, h;
+     CARD32	m, n, o, p;
+ 
+-    fbComposeGetSolid(pSrc, src, pDst->format);
++    fbComposeGetSolid(params->src, src, params->dest->format);
+ 
+-    dstMask = FbFullMask (pDst->pDrawable->depth);
++    dstMask = FbFullMask (params->dest->pDrawable->depth);
+     srca = src >> 24;
+     if (src == 0)
+ 	return;
+ 
+-    fbComposeGetStart (pDst, xDst, yDst, CARD32, dstStride, dstLine, 1);
+-    fbComposeGetStart (pMask, xMask, yMask, CARD32, maskStride, maskLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD32,
++                       dstStride, dstLine, 1);
++    fbComposeGetStart (params->mask, params->xMask, params->yMask, CARD32,
++                       maskStride, maskLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	mask = maskLine;
+ 	maskLine += maskStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    ma = *mask++;
++	    ma = READ(mask++);
+ 	    if (ma == 0xffffffff)
+ 	    {
+ 		if (srca == 0xff)
+-		    *dst = src & dstMask;
++		    WRITE(dst, src & dstMask);
+ 		else
+-		    *dst = fbOver (src, *dst) & dstMask;
++		    WRITE(dst, fbOver (src, READ(dst)) & dstMask);
+ 	    }
+ 	    else if (ma)
+ 	    {
+-		d = *dst;
++		d = READ(dst);
+ #define FbInOverC(src,srca,msk,dst,i,result) { \
+     CARD16  __a = FbGet8(msk,i); \
+     CARD32  __t, __ta; \
+@@ -221,54 +196,49 @@ fbCompositeSolidMask_nx8888x8888C (CARD8      op,
+ 		FbInOverC (src, srca, ma, d, 8, n);
+ 		FbInOverC (src, srca, ma, d, 16, o);
+ 		FbInOverC (src, srca, ma, d, 24, p);
+-		*dst = m|n|o|p;
++		WRITE(dst, m|n|o|p);
+ 	    }
+ 	    dst++;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSolidMask_nx8x0888 (CARD8      op,
+-			       PicturePtr pSrc,
+-			       PicturePtr pMask,
+-			       PicturePtr pDst,
+-			       INT16      xSrc,
+-			       INT16      ySrc,
+-			       INT16      xMask,
+-			       INT16      yMask,
+-			       INT16      xDst,
+-			       INT16      yDst,
+-			       CARD16     width,
+-			       CARD16     height)
++fbCompositeSolidMask_nx8x0888 (FbComposeData *params)
+ {
+     CARD32	src, srca;
+     CARD8	*dstLine, *dst;
+     CARD32	d;
+     CARD8	*maskLine, *mask, m;
+     FbStride	dstStride, maskStride;
+-    CARD16	w;
++    CARD16	w, h;
+ 
+-    fbComposeGetSolid(pSrc, src, pDst->format);
++    fbComposeGetSolid(params->src, src, params->dest->format);
+ 
+     srca = src >> 24;
+     if (src == 0)
+ 	return;
+ 
+-    fbComposeGetStart (pDst, xDst, yDst, CARD8, dstStride, dstLine, 3);
+-    fbComposeGetStart (pMask, xMask, yMask, CARD8, maskStride, maskLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD8,
++                       dstStride, dstLine, 3);
++    fbComposeGetStart (params->mask, params->xMask, params->yMask, CARD8,
++                       maskStride, maskLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	mask = maskLine;
+ 	maskLine += maskStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    m = *mask++;
++	    m = READ(mask++);
+ 	    if (m == 0xff)
+ 	    {
+ 		if (srca == 0xff)
+@@ -288,78 +258,71 @@ fbCompositeSolidMask_nx8x0888 (CARD8      op,
+ 	    dst += 3;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSolidMask_nx8x0565 (CARD8      op,
+-				  PicturePtr pSrc,
+-				  PicturePtr pMask,
+-				  PicturePtr pDst,
+-				  INT16      xSrc,
+-				  INT16      ySrc,
+-				  INT16      xMask,
+-				  INT16      yMask,
+-				  INT16      xDst,
+-				  INT16      yDst,
+-				  CARD16     width,
+-				  CARD16     height)
++fbCompositeSolidMask_nx8x0565 (FbComposeData *params)
+ {
+     CARD32	src, srca;
+     CARD16	*dstLine, *dst;
+     CARD32	d;
+     CARD8	*maskLine, *mask, m;
+     FbStride	dstStride, maskStride;
+-    CARD16	w;
++    CARD16	w, h;
+ 
+-    fbComposeGetSolid(pSrc, src, pDst->format);
++    fbComposeGetSolid(params->src, src, params->dest->format);
+ 
+     srca = src >> 24;
+     if (src == 0)
+ 	return;
+ 
+-    fbComposeGetStart (pDst, xDst, yDst, CARD16, dstStride, dstLine, 1);
+-    fbComposeGetStart (pMask, xMask, yMask, CARD8, maskStride, maskLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
++                       dstStride, dstLine, 1);
++    fbComposeGetStart (params->mask, params->xMask, params->yMask, CARD8,
++                       maskStride, maskLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	mask = maskLine;
+ 	maskLine += maskStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    m = *mask++;
++	    m = READ(mask++);
+ 	    if (m == 0xff)
+ 	    {
+-		 d = src;
+-		 *dst = cvt8888to0565(d);
++		if (srca == 0xff)
++		    d = src;
++		else
++		{
++		    d = READ(dst);
++		    d = fbOver24 (src, cvt0565to8888(d));
++		}
++		WRITE(dst, cvt8888to0565(d));
+ 	    }
+ 	    else if (m)
+ 	    {
+-		d = *dst;
++		d = READ(dst);
+ 		d = fbOver24 (fbIn(src,m), cvt0565to8888(d));
+-		*dst = cvt8888to0565(d);
++		WRITE(dst, cvt8888to0565(d));
+ 	    }
+ 	    dst++;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSolidMask_nx8888x0565C (CARD8      op,
+-				   PicturePtr pSrc,
+-				   PicturePtr pMask,
+-				   PicturePtr pDst,
+-				   INT16      xSrc,
+-				   INT16      ySrc,
+-				   INT16      xMask,
+-				   INT16      yMask,
+-				   INT16      xDst,
+-				   INT16      yDst,
+-				   CARD16     width,
+-				   CARD16     height)
++fbCompositeSolidMask_nx8888x0565C (FbComposeData *params)
+ {
+     CARD32	src, srca;
+     CARD16	src16;
+@@ -367,10 +330,10 @@ fbCompositeSolidMask_nx8888x0565C (CARD8      op,
+     CARD32	d;
+     CARD32	*maskLine, *mask, ma;
+     FbStride	dstStride, maskStride;
+-    CARD16	w;
++    CARD16	w, h;
+     CARD32	m, n, o;
+ 
+-    fbComposeGetSolid(pSrc, src, pDst->format);
++    fbComposeGetSolid (params->src, src, params->dest->format);
+ 
+     srca = src >> 24;
+     if (src == 0)
+@@ -378,129 +341,122 @@ fbCompositeSolidMask_nx8888x0565C (CARD8      op,
+ 
+     src16 = cvt8888to0565(src);
+ 
+-    fbComposeGetStart (pDst, xDst, yDst, CARD16, dstStride, dstLine, 1);
+-    fbComposeGetStart (pMask, xMask, yMask, CARD32, maskStride, maskLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
++                       dstStride, dstLine, 1);
++    fbComposeGetStart (params->mask, params->xMask, params->yMask, CARD32,
++                       maskStride, maskLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	mask = maskLine;
+ 	maskLine += maskStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    ma = *mask++;
++	    ma = READ(mask++);
+ 	    if (ma == 0xffffffff)
+ 	    {
+ 		if (srca == 0xff)
+ 		{
+-		    *dst = src16;
++		    WRITE(dst, src16);
+ 		}
+ 		else
+ 		{
+-		    d = *dst;
++		    d = READ(dst);
+ 		    d = fbOver24 (src, cvt0565to8888(d));
+-		    *dst = cvt8888to0565(d);
++		    WRITE(dst, cvt8888to0565(d));
+ 		}
+ 	    }
+ 	    else if (ma)
+ 	    {
+-		d = *dst;
++		d = READ(dst);
+ 		d = cvt0565to8888(d);
+ 		FbInOverC (src, srca, ma, d, 0, m);
+ 		FbInOverC (src, srca, ma, d, 8, n);
+ 		FbInOverC (src, srca, ma, d, 16, o);
+ 		d = m|n|o;
+-		*dst = cvt8888to0565(d);
++		WRITE(dst, cvt8888to0565(d));
+ 	    }
+ 	    dst++;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSrc_8888x8888 (CARD8      op,
+-			 PicturePtr pSrc,
+-			 PicturePtr pMask,
+-			 PicturePtr pDst,
+-			 INT16      xSrc,
+-			 INT16      ySrc,
+-			 INT16      xMask,
+-			 INT16      yMask,
+-			 INT16      xDst,
+-			 INT16      yDst,
+-			 CARD16     width,
+-			 CARD16     height)
++fbCompositeSrc_8888x8888 (FbComposeData *params)
+ {
+     CARD32	*dstLine, *dst, dstMask;
+     CARD32	*srcLine, *src, s;
+     FbStride	dstStride, srcStride;
+     CARD8	a;
+-    CARD16	w;
++    CARD16	w, h;
+ 
+-    fbComposeGetStart (pDst, xDst, yDst, CARD32, dstStride, dstLine, 1);
+-    fbComposeGetStart (pSrc, xSrc, ySrc, CARD32, srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD32,
++                       dstStride, dstLine, 1);
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
++                       srcStride, srcLine, 1);
+ 
+-    dstMask = FbFullMask (pDst->pDrawable->depth);
++    dstMask = FbFullMask (params->dest->pDrawable->depth);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	src = srcLine;
+ 	srcLine += srcStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    s = *src++;
++	    s = READ(src++);
+ 	    a = s >> 24;
+ 	    if (a == 0xff)
+-		*dst = s & dstMask;
++		WRITE(dst, s & dstMask);
+ 	    else if (a)
+-		*dst = fbOver (s, *dst) & dstMask;
++		WRITE(dst, fbOver (s, READ(dst)) & dstMask);
+ 	    dst++;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSrc_8888x0888 (CARD8      op,
+-			 PicturePtr pSrc,
+-			 PicturePtr pMask,
+-			 PicturePtr pDst,
+-			 INT16      xSrc,
+-			 INT16      ySrc,
+-			 INT16      xMask,
+-			 INT16      yMask,
+-			 INT16      xDst,
+-			 INT16      yDst,
+-			 CARD16     width,
+-			 CARD16     height)
++fbCompositeSrc_8888x0888 (FbComposeData *params)
+ {
+     CARD8	*dstLine, *dst;
+     CARD32	d;
+     CARD32	*srcLine, *src, s;
+     CARD8	a;
+     FbStride	dstStride, srcStride;
+-    CARD16	w;
++    CARD16	w, h;
+ 
+-    fbComposeGetStart (pDst, xDst, yDst, CARD8, dstStride, dstLine, 3);
+-    fbComposeGetStart (pSrc, xSrc, ySrc, CARD32, srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD8,
++                       dstStride, dstLine, 3);
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
++                       srcStride, srcLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	src = srcLine;
+ 	srcLine += srcStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    s = *src++;
++	    s = READ(src++);
+ 	    a = s >> 24;
+ 	    if (a)
+ 	    {
+@@ -513,43 +469,38 @@ fbCompositeSrc_8888x0888 (CARD8      op,
+ 	    dst += 3;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSrc_8888x0565 (CARD8      op,
+-			 PicturePtr pSrc,
+-			 PicturePtr pMask,
+-			 PicturePtr pDst,
+-			 INT16      xSrc,
+-			 INT16      ySrc,
+-			 INT16      xMask,
+-			 INT16      yMask,
+-			 INT16      xDst,
+-			 INT16      yDst,
+-			 CARD16     width,
+-			 CARD16     height)
++fbCompositeSrc_8888x0565 (FbComposeData *params)
+ {
+     CARD16	*dstLine, *dst;
+     CARD32	d;
+     CARD32	*srcLine, *src, s;
+     CARD8	a;
+     FbStride	dstStride, srcStride;
+-    CARD16	w;
++    CARD16	w, h;
+ 
+-    fbComposeGetStart (pSrc, xSrc, ySrc, CARD32, srcStride, srcLine, 1);
+-    fbComposeGetStart (pDst, xDst, yDst, CARD16, dstStride, dstLine, 1);
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
++                       srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
++                       dstStride, dstLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	src = srcLine;
+ 	srcLine += srcStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    s = *src++;
++	    s = READ(src++);
+ 	    a = s >> 24;
+ 	    if (a)
+ 	    {
+@@ -557,280 +508,128 @@ fbCompositeSrc_8888x0565 (CARD8      op,
+ 		    d = s;
+ 		else
+ 		{
+-		    d = *dst;
++		    d = READ(dst);
+ 		    d = fbOver24 (s, cvt0565to8888(d));
+ 		}
+-		*dst = cvt8888to0565(d);
++		WRITE(dst, cvt8888to0565(d));
+ 	    }
+ 	    dst++;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSrc_0565x0565 (CARD8      op,
+-			  PicturePtr pSrc,
+-			  PicturePtr pMask,
+-			  PicturePtr pDst,
+-			  INT16      xSrc,
+-			  INT16      ySrc,
+-			  INT16      xMask,
+-			  INT16      yMask,
+-			  INT16      xDst,
+-			  INT16      yDst,
+-			  CARD16     width,
+-			  CARD16     height)
++fbCompositeSrc_0565x0565 (FbComposeData *params)
+ {
+     CARD16	*dstLine, *dst;
+     CARD16	*srcLine, *src;
+     FbStride	dstStride, srcStride;
+-    CARD16	w;
++    CARD16	w, h;
+ 
+-    fbComposeGetStart (pSrc, xSrc, ySrc, CARD16, srcStride, srcLine, 1);
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD16,
++                       srcStride, srcLine, 1);
+ 
+-    fbComposeGetStart (pDst, xDst, yDst, CARD16, dstStride, dstLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
++                       dstStride, dstLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	src = srcLine;
+ 	srcLine += srcStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+-	    *dst++ = *src++;
++	    WRITE(dst, READ(src++));
+     }
+-}
+-
+-
+-#define cvt8888Revto0565(s) ((((s) >> 19) & 0x001f) | \
+-			     (((s) >>  5) & 0x07e0) | \
+-			     (((s) <<  8) & 0xf800))
+-
+-#define FbOverU_8888RevNPx565(s, d) \
+-        \
+-        /* Extract alpha */ \
+-        s_a = (s) >> 24; \
+-        \
+-        /* Extract r8g8b8 color channels */ \
+-        s_r  = ( (s)        & 0xff); \
+-        s_g  = (((s) >>  8) & 0xff); \
+-        s_b  = (((s) >> 16) & 0xff); \
+-        \
+-        /* Extract r5g6b5 color channels */ \
+-        d_r = ((d) >> 8) & 0xf8; \
+-        d_g = ((d) >> 3) & 0xfc; \
+-        d_b = ((d) << 3) & 0xf8; \
+-        \
+-        /* Use the higher bits of the channel to fill out the bottom */ \
+-        d_r |= (d_r >> 5); \
+-        d_g |= (d_g >> 6); \
+-        d_b |= (d_b >> 5); \
+-        \
+-        /* Blend */ \
+-        d_r = (s_r - d_r) * s_a + (d_r << 8); \
+-        d_g = (s_g - d_g) * s_a + (d_g << 8); \
+-        d_b = (s_b - d_b) * s_a + (d_b << 8); \
+-        \
+-        /* Pack result as r5g6b5 */ \
+-        (d) = (d_r & 0xf800) | ((d_g & 0xfc00) >> 5) | (d_b >> 11)
+-
+-void
+-fbCompositeSrc_8888RevNPx0565 (FbComposeData *params)
+-{
+-    CARD16	*dstLine, *dst;
+-    CARD32	*srcLine, *src;
+-    FbStride	dstStride, srcStride;
+-    int         w, h;
+ 
+-    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
+-                       srcStride, srcLine, 1);
+-    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
+-                       dstStride, dstLine, 1);
+-    h = params->height;
+-
+-    while (h--)
+-    {
+-        CARD32 s1, s2, s3, s4;
+-        int d_r, d_g, d_b, s_r, s_g, s_b, s_a;
+-        CARD32 *dst_2px_wide;
+-
+-        src = srcLine;
+-        srcLine += srcStride;
+-        dst_2px_wide = (CARD32 *) dstLine;
+-        dstLine += dstStride;
+-	w = params->width - 4;
+-
+-        while (w >= 0)
+-        {
+-            s1 = *src;
+-            s2 = *(src + 1);
+-            s3 = *(src + 2);
+-            s4 = *(src + 3);
+-
+-            w -= 4;
+-            src += 4;
+ 
+-            /* Check if the next 4 pixels are opaque */
+-            if ((s1 & s2 & s3 & s4) > 0xfeffffff)
+-            {
+-                /* In this case, we just perform a SOURCE for all 4 pixels */
+-#if X_BYTE_ORDER == X_BIG_ENDIAN
+-                *dst_2px_wide++ = (cvt8888Revto0565 (s1) << 16) |
+-                                   cvt8888Revto0565 (s2);
+-                *dst_2px_wide++ = (cvt8888Revto0565 (s3) << 16) |
+-                                   cvt8888Revto0565 (s4);
+-#else
+-                *dst_2px_wide++ =  cvt8888Revto0565 (s1) |
+-                                  (cvt8888Revto0565 (s2) << 16);
+-                *dst_2px_wide++ =  cvt8888Revto0565 (s3) |
+-                                  (cvt8888Revto0565 (s4) << 16);
+-#endif
+-            }
+-            /* Next, check if the next 4 pixels have any alpha in them at all */
+-            else if ((s1 | s2 | s3 | s4) > 0x00ffffff)
+-            {
+-                /* In which case, we perform OVER on each one of them */
+-                CARD32 d1, d2, d3, d4;
+-
+-#if X_BYTE_ORDER == X_BIG_ENDIAN
+-                d1 = (*dst_2px_wide >> 16);
+-                d2 = (*dst_2px_wide & 0xffff);
+-                FbOverU_8888RevNPx565 (s1, d1);
+-                FbOverU_8888RevNPx565 (s2, d2);
+-                *dst_2px_wide++ = (d1 << 16) | d2;
+-#else
+-                d2 = (*dst_2px_wide >> 16);
+-                d1 = (*dst_2px_wide & 0xffff);
+-                FbOverU_8888RevNPx565 (s1, d1);
+-                FbOverU_8888RevNPx565 (s2, d2);
+-                *dst_2px_wide++ = d1 | (d2 << 16);
+-#endif
+-
+-#if X_BYTE_ORDER == X_BIG_ENDIAN
+-                d3 = (*dst_2px_wide >> 16);
+-                d4 = (*dst_2px_wide & 0xffff);
+-                FbOverU_8888RevNPx565 (s3, d3);
+-                FbOverU_8888RevNPx565 (s4, d4);
+-                *dst_2px_wide++ = (d3 << 16) | d4;
+-#else
+-                d4 = (*dst_2px_wide >> 16);
+-                d3 = (*dst_2px_wide & 0xffff);
+-                FbOverU_8888RevNPx565 (s3, d3);
+-                FbOverU_8888RevNPx565 (s4, d4);
+-                *dst_2px_wide++ = d3 | (d4 << 16);
+-#endif
+-            }
+-            else
+-            {
+-                /* Do nothing, since the source pixels are all transparent */
+-                dst_2px_wide += 2;
+-            }
+-        }
+ 
+-        /* Deal with left over pixels */
+-        for (dst = (CARD16 *) dst_2px_wide; w > -4; w--)
+-        {
+-            CARD32 d = *dst;
+-            CARD32 s = *src++;
+-            FbOverU_8888RevNPx565 (s, d);
+-            *dst++ = d;
+-        }
+-    }
+ }
+ 
+ void
+-fbCompositeSrcAdd_8000x8000 (CARD8	op,
+-			     PicturePtr pSrc,
+-			     PicturePtr pMask,
+-			     PicturePtr pDst,
+-			     INT16      xSrc,
+-			     INT16      ySrc,
+-			     INT16      xMask,
+-			     INT16      yMask,
+-			     INT16      xDst,
+-			     INT16      yDst,
+-			     CARD16     width,
+-			     CARD16     height)
++fbCompositeSrcAdd_8000x8000 (FbComposeData *params)
+ {
+     CARD8	*dstLine, *dst;
+     CARD8	*srcLine, *src;
+     FbStride	dstStride, srcStride;
+-    CARD16	w;
++    CARD16	w, h;
+     CARD8	s, d;
+     CARD16	t;
+ 
+-    fbComposeGetStart (pSrc, xSrc, ySrc, CARD8, srcStride, srcLine, 1);
+-    fbComposeGetStart (pDst, xDst, yDst, CARD8, dstStride, dstLine, 1);
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD8,
++                       srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD8,
++                       dstStride, dstLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	src = srcLine;
+ 	srcLine += srcStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    s = *src++;
++	    s = READ(src++);
+ 	    if (s)
+ 	    {
+ 		if (s != 0xff)
+ 		{
+-		    d = *dst;
++		    d = READ(dst);
+ 		    t = d + s;
+ 		    s = t | (0 - (t >> 8));
+ 		}
+-		*dst = s;
++		WRITE(dst, s);
+ 	    }
+ 	    dst++;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSrcAdd_8888x8888 (CARD8	op,
+-			     PicturePtr pSrc,
+-			     PicturePtr pMask,
+-			     PicturePtr pDst,
+-			     INT16      xSrc,
+-			     INT16      ySrc,
+-			     INT16      xMask,
+-			     INT16      yMask,
+-			     INT16      xDst,
+-			     INT16      yDst,
+-			     CARD16     width,
+-			     CARD16     height)
++fbCompositeSrcAdd_8888x8888 (FbComposeData *params)
+ {
+     CARD32	*dstLine, *dst;
+     CARD32	*srcLine, *src;
+     FbStride	dstStride, srcStride;
+-    CARD16	w;
++    CARD16	w, h;
+     CARD32	s, d;
+     CARD16	t;
+     CARD32	m,n,o,p;
+ 
+-    fbComposeGetStart (pSrc, xSrc, ySrc, CARD32, srcStride, srcLine, 1);
+-    fbComposeGetStart (pDst, xDst, yDst, CARD32, dstStride, dstLine, 1);
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
++                       srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD32,
++                       dstStride, dstLine, 1);
+ 
+-    while (height--)
++    h = params->height;
++    while (h--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+ 	src = srcLine;
+ 	srcLine += srcStride;
+-	w = width;
++	w = params->width;
+ 
+ 	while (w--)
+ 	{
+-	    s = *src++;
++	    s = READ(src++);
+ 	    if (s)
+ 	    {
+ 		if (s != 0xffffffff)
+ 		{
+-		    d = *dst;
++		    d = READ(dst);
+ 		    if (d)
+ 		    {
+ 			m = FbAdd(s,d,0,t);
+@@ -840,26 +639,18 @@ fbCompositeSrcAdd_8888x8888 (CARD8	op,
+ 			s = m|n|o|p;
+ 		    }
+ 		}
+-		*dst = s;
++		WRITE(dst, s);
+ 	    }
+ 	    dst++;
+ 	}
+     }
++
++
++
+ }
+ 
+ void
+-fbCompositeSrcAdd_1000x1000 (CARD8	op,
+-			     PicturePtr pSrc,
+-			     PicturePtr pMask,
+-			     PicturePtr pDst,
+-			     INT16      xSrc,
+-			     INT16      ySrc,
+-			     INT16      xMask,
+-			     INT16      yMask,
+-			     INT16      xDst,
+-			     INT16      yDst,
+-			     CARD16     width,
+-			     CARD16     height)
++fbCompositeSrcAdd_1000x1000 (FbComposeData *params)
+ {
+     FbBits	*dstBits, *srcBits;
+     FbStride	dstStride, srcStride;
+@@ -867,20 +658,22 @@ fbCompositeSrcAdd_1000x1000 (CARD8	op,
+     int		dstXoff, dstYoff;
+     int		srcXoff, srcYoff;
+ 
+-    fbGetDrawable(pSrc->pDrawable, srcBits, srcStride, srcBpp, srcXoff, srcYoff);
++    fbGetDrawable(params->src->pDrawable, srcBits, srcStride, srcBpp,
++                  srcXoff, srcYoff);
+ 
+-    fbGetDrawable(pDst->pDrawable, dstBits, dstStride, dstBpp, dstXoff, dstYoff);
++    fbGetDrawable(params->dest->pDrawable, dstBits, dstStride, dstBpp,
++                  dstXoff, dstYoff);
+ 
+-    fbBlt (srcBits + srcStride * (ySrc + srcYoff),
++    fbBlt (srcBits + srcStride * (params->ySrc + srcYoff),
+ 	   srcStride,
+-	   xSrc + srcXoff,
++	   params->xSrc + srcXoff,
+ 
+-	   dstBits + dstStride * (yDst + dstYoff),
++	   dstBits + dstStride * (params->yDest + dstYoff),
+ 	   dstStride,
+-	   xDst + dstXoff,
++	   params->xDest + dstXoff,
+ 
+-	   width,
+-	   height,
++	   params->width,
++	   params->height,
+ 
+ 	   GXor,
+ 	   FB_ALLONES,
+@@ -888,21 +681,11 @@ fbCompositeSrcAdd_1000x1000 (CARD8	op,
+ 
+ 	   FALSE,
+ 	   FALSE);
++
+ }
+ 
+ void
+-fbCompositeSolidMask_nx1xn (CARD8      op,
+-			    PicturePtr pSrc,
+-			    PicturePtr pMask,
+-			    PicturePtr pDst,
+-			    INT16      xSrc,
+-			    INT16      ySrc,
+-			    INT16      xMask,
+-			    INT16      yMask,
+-			    INT16      xDst,
+-			    INT16      yDst,
+-			    CARD16     width,
+-			    CARD16     height)
++fbCompositeSolidMask_nx1xn (FbComposeData *params)
+ {
+     FbBits	*dstBits;
+     FbStip	*maskBits;
+@@ -912,17 +695,17 @@ fbCompositeSolidMask_nx1xn (CARD8      op,
+     int		maskXoff, maskYoff;
+     FbBits	src;
+ 
+-    fbComposeGetSolid(pSrc, src, pDst->format);
++    fbComposeGetSolid(params->src, src, params->dest->format);
+ 
+     if ((src & 0xff000000) != 0xff000000)
+     {
+-	fbCompositeGeneral  (op, pSrc, pMask, pDst,
+-			     xSrc, ySrc, xMask, yMask, xDst, yDst,
+-			     width, height);
++	fbCompositeGeneral (params);
+ 	return;
+     }
+-    fbGetStipDrawable (pMask->pDrawable, maskBits, maskStride, maskBpp, maskXoff, maskYoff);
+-    fbGetDrawable (pDst->pDrawable, dstBits, dstStride, dstBpp, dstXoff, dstYoff);
++    fbGetStipDrawable (params->mask->pDrawable, maskBits, maskStride,
++                       maskBpp, maskXoff, maskYoff);
++    fbGetDrawable (params->dest->pDrawable, dstBits, dstStride, dstBpp,
++                   dstXoff, dstYoff);
+ 
+     switch (dstBpp) {
+     case 32:
+@@ -936,51 +719,877 @@ fbCompositeSolidMask_nx1xn (CARD8      op,
+ 
+     src = fbReplicatePixel (src, dstBpp);
+ 
+-    fbBltOne (maskBits + maskStride * (yMask + maskYoff),
++    fbBltOne (maskBits + maskStride * (params->yMask + maskYoff),
+ 	      maskStride,
+-	      xMask + maskXoff,
++	      params->xMask + maskXoff,
+ 
+-	      dstBits + dstStride * (yDst + dstYoff),
++	      dstBits + dstStride * (params->yDest + dstYoff),
+ 	      dstStride,
+-	      (xDst + dstXoff) * dstBpp,
++	      (params->xDest + dstXoff) * dstBpp,
+ 	      dstBpp,
+ 
+-	      width * dstBpp,
+-	      height,
++	      params->width * dstBpp,
++	      params->height,
+ 
+ 	      0x0,
+ 	      src,
+ 	      FB_ALLONES,
+ 	      0x0);
++
++
++
++}
++
++static Bool
++fbCompositeCopyArea_internal (DrawablePtr  pSrc,
++           DrawablePtr  pDst,
++           int      src_x,
++           int      src_y,
++           int      dst_x,
++           int      dst_y,
++           int      width,
++           int      height)
++{
++    FbBits *    src_bits;
++    FbStride    src_stride;
++    int     src_bpp;
++    int     src_xoff;
++    int     src_yoff;
++
++    FbBits *    dst_bits;
++    FbStride    dst_stride;
++    int     dst_bpp;
++    int     dst_xoff;
++    int     dst_yoff;
++
++    CARD8 * src_bytes;
++    CARD8 * dst_bytes;
++    int     byte_width;
++
++    fbGetDrawable(pSrc, src_bits, src_stride, src_bpp, src_xoff, src_yoff);
++    fbGetDrawable(pDst, dst_bits, dst_stride, dst_bpp, dst_xoff, dst_yoff);
++
++    if (src_bpp != dst_bpp) return FALSE;
++
++    if (src_bpp == 8)
++    {
++        src_stride = src_stride * sizeof (FbBits) / 1;
++        dst_stride = dst_stride * sizeof (FbBits) / 1;
++        src_bytes = (CARD8 *)(((CARD8 *)src_bits) + src_stride * (src_y + src_yoff) + (src_x + src_xoff));
++        dst_bytes = (CARD8 *)(((CARD8 *)dst_bits) + dst_stride * (dst_y + dst_yoff) + (dst_x + dst_xoff));
++        byte_width = 1 * width;
++        src_stride *= 1;
++        dst_stride *= 1;
++    } else if (src_bpp == 16)
++    {
++        src_stride = src_stride * sizeof (FbBits) / 2;
++        dst_stride = dst_stride * sizeof (FbBits) / 2;
++        src_bytes = (CARD8 *)(((CARD16 *)src_bits) + src_stride * (src_y + src_yoff) + (src_x + src_xoff));
++        dst_bytes = (CARD8 *)(((CARD16 *)dst_bits) + dst_stride * (dst_y + dst_yoff) + (dst_x + dst_xoff));
++        byte_width = 2 * width;
++        src_stride *= 2;
++        dst_stride *= 2;
++    } else if (src_bpp == 32) {
++        src_stride = src_stride * sizeof (FbBits) / 4;
++        dst_stride = dst_stride * sizeof (FbBits) / 4;
++        src_bytes = (CARD8 *)(((CARD32 *)src_bits) + src_stride * (src_y + src_yoff) + (src_x + src_xoff));
++        dst_bytes = (CARD8 *)(((CARD32 *)dst_bits) + dst_stride * (dst_y + dst_yoff) + (dst_x + dst_xoff));
++        byte_width = 4 * width;
++        src_stride *= 4;
++        dst_stride *= 4;
++    } else {
++        return FALSE;
++    }
++
++    while (height--)
++    {
++        int w;
++        CARD8 *s = src_bytes;
++        CARD8 *d = dst_bytes;
++        src_bytes += src_stride;
++        dst_bytes += dst_stride;
++        w = byte_width;
++
++        MEMCPY_WRAPPED(d, s, w);
++    }
++
++    return TRUE;
++}
++
++static void
++fbCompositeCopyArea (FbComposeData *params)
++{
++    fbCompositeCopyArea_internal (params->src->pDrawable,
++           params->dest->pDrawable,
++           params->xSrc, params->ySrc,
++           params->xDest, params->yDest,
++           params->width, params->height);
++}
++
++void
++fbCompositeSrc_8888RevNPx0565 (FbComposeData *params)
++{
++    CARD16	*dstLine, *dst;
++    CARD32	d;
++    CARD32	*srcLine, *src, s;
++    CARD8	a;
++    FbStride	dstStride, srcStride;
++    CARD16	w, h;
++
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
++                       srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
++                       dstStride, dstLine, 1);
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++        src = srcLine;
++        srcLine += srcStride;
++        w = params->width;
++
++        while (w--)
++        {
++            s = READ(src++);
++            a = s >> 24;
++            if (a)
++            {
++                if (a == 0xff)
++                    d = ((s & 0xFF) << 16) | (s & 0xFF00) | ((s & 0xFF0000) >> 16);
++                else
++                {
++                    s = fbIn(((s & 0xFF) << 16) | (s & 0xFF00) | ((s & 0xFF0000) >> 16), a) | (a << 24);
++                    d = READ(dst);
++                    d = fbOver24 (s, cvt0565to8888(d));
++                }
++                WRITE(dst, cvt8888to0565(d));
++            }
++            dst++;
++        }
++    }
++
++
++
++}
++
++/* Check if we have faster ARMv6 optimized versions of these macros */
++#ifdef FbByteMulAdd_store_r5g6b5_armv6
++#undef FbByteMulAdd_store_r5g6b5
++#define FbByteMulAdd_store_r5g6b5(x, a, y) FbByteMulAdd_store_r5g6b5_armv6(x, a, y)
++#endif
++
++#ifdef FbByteMulAdd_store_x8r8g8b8_armv6
++#undef FbByteMulAdd_store_x8r8g8b8
++#define FbByteMulAdd_store_x8r8g8b8(x, a, y) FbByteMulAdd_store_x8r8g8b8_armv6(x, a, y)
++#endif
++
++void
++fbComposite_a8r8g8b8_over_x8r8g8b8 (FbComposeData *params)
++{
++    CARD32	*dstLine, *dst;
++    CARD32	*srcLine, *src, s1, s2, d;
++    FbStride	dstStride, srcStride;
++    CARD8	a1, a2;
++    int	w, h;
++
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD32,
++                       dstStride, dstLine, 1);
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
++                       srcStride, srcLine, 1);
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++        src = srcLine;
++        srcLine += srcStride;
++        w = params->width;
++
++        while ((w -= 2) >= 0)
++        {
++            s1 = READ(src++);
++            s2 = READ(src++);
++            a1 = s1 >> 24;
++            a2 = s2 >> 24;
++            if (a1)
++            {
++                if (a1 == 0xff)
++                    WRITE(dst, s1 & 0xffffff);
++                else if (a1) {
++                    d = READ(dst);
++                    a1 ^= 0xff;
++                    FbByteMulAdd_store_x8r8g8b8(d, a1, s1);
++                    WRITE(dst, d);
++                }
++            }
++            dst++;
++            if (a2)
++            {
++                if (a2 == 0xff)
++                    WRITE(dst, s2 & 0xffffff);
++                else if (a2) {
++                    d = READ(dst);
++                    a2 ^= 0xff;
++                    FbByteMulAdd_store_x8r8g8b8(d, a2, s2);
++                    WRITE(dst, d);
++                }
++            }
++            dst++;
++        }
++        if (w & 1)
++        {
++            s1 = READ(src++);
++            a1 = s1 >> 24;
++            if (a1)
++            {
++                if (a1 == 0xff)
++                    WRITE(dst, s1 & 0xffffff);
++                else if (a1) {
++                    d = READ(dst);
++                    a1 ^= 0xff;
++                    FbByteMulAdd_store_x8r8g8b8(d, a1, s1);
++                    WRITE(dst, d);
++                }
++            }
++            dst++;
++        }
++    }
++
++
++
++}
++
++void
++fbComposite_a8r8g8b8_over_r5g6b5 (FbComposeData *params)
++{
++    CARD16	*dstLine, *dst;
++    CARD32	d;
++    CARD32	*srcLine, *src, s1, s2;
++    CARD8	a1, a2;
++    FbStride	dstStride, srcStride;
++    int 	w, h;
++
++    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD32,
++                       srcStride, srcLine, 1);
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16,
++                       dstStride, dstLine, 1);
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++        src = srcLine;
++        srcLine += srcStride;
++        w = params->width;
++
++        while ((w -= 2) >= 0)
++        {
++            s1 = READ(src++);
++            s2 = READ(src++);
++            a1 = s1 >> 24;
++            a2 = s2 >> 24;
++            if (a1)
++            {
++                if (a1 == 0xff)
++                    d = cvt8888to0565(s1);
++                else
++                {
++                    d = cvt0565to8888(READ(dst));
++                    a1 ^= 0xff;
++                    FbByteMulAdd_store_r5g6b5(d, a1, s1);
++                }
++                WRITE(dst, d);
++            }
++            dst++;
++            if (a2)
++            {
++                if (a2 == 0xff)
++                    d = cvt8888to0565(s2);
++                else
++                {
++                    d = cvt0565to8888(READ(dst));
++                    a2 ^= 0xff;
++                    FbByteMulAdd_store_r5g6b5(d, a2, s2);
++                }
++                WRITE(dst, d);
++            }
++            dst++;
++        }
++        if (w & 1)
++        {
++            s1 = READ(src++);
++            a1 = s1 >> 24;
++            if (a1)
++            {
++                if (a1 == 0xff)
++                    d = cvt8888to0565(s1);
++                else
++                {
++                    d = cvt0565to8888(READ(dst));
++                    a1 ^= 0xff;
++                    FbByteMulAdd_store_r5g6b5(d, a1, s1);
++                }
++                WRITE(dst, d);
++            }
++            dst++;
++        }
++    }
++
++
++
++}
++
++void fbCompositeTransformNearestNonrotatedAffineTrivialclip_a8r8g8b8_over_x8r8g8b8 (FbComposeData *params,
++    FbBits *bits, int stride, CARD32 vv0, CARD32 vv1, CARD32 uv0, CARD32 uv1)
++{
++    CARD32  *dstLine, *dst;
++    CARD32  d;
++    CARD32  s1, s2;
++    FbStride    dstStride;
++    CARD8   a1, a2;
++    int w, h;
++    FbBits *xbits;
++    int x1, x2, y;
++    CARD32 orig_vv0 = vv0;
++
++    BoxRec box = params->src->pCompositeClip->extents;
++
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD32, dstStride, dstLine, 1);
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++
++        y = vv1 >> 16;
++        vv1 += uv1;
++
++        if ((y < box.y1) || (y >= box.y2)) {
++            continue;
++        }
++
++        xbits = bits + stride * y;
++
++        w = params->width;
++        vv0 = orig_vv0;
++        while ((w -= 2) >= 0)
++        {
++            x1 = vv0 >> 16;
++            vv0 += uv0;
++            s1 = READ((CARD32 *)xbits + x1);
++
++            x2 = vv0 >> 16;
++            vv0 += uv0;
++            s2 = READ((CARD32 *)xbits + x2);
++
++            a1 = s1 >> 24;
++            a2 = s2 >> 24;
++
++            if (a1 == 0xff)
++                WRITE(dst, s1 & 0xffffff);
++            else if (a1) {
++                d = READ(dst);
++                a1 ^= 0xff;
++                FbByteMulAdd_store_x8r8g8b8(d, a1, s1);
++                WRITE(dst, d);
++            }
++            dst++;
++
++            if (a2 == 0xff)
++                WRITE(dst, s2 & 0xffffff);
++            else if (a2) {
++                d = READ(dst);
++                a2 ^= 0xff;
++                FbByteMulAdd_store_x8r8g8b8(d, a2, s2);
++                WRITE(dst, d);
++            }
++            dst++;
++        }
++        if (w & 1) {
++            x1 = vv0 >> 16;
++            vv0 += uv0;
++            s1 = READ((CARD32 *)xbits + x1);
++
++            a1 = s1 >> 24;
++            if (a1 == 0xff)
++                WRITE(dst, s1 & 0xffffff);
++            else if (a1) {
++                d = READ(dst);
++                a1 ^= 0xff;
++                FbByteMulAdd_store_x8r8g8b8(d, a1, s1);
++                WRITE(dst, d);
++            }
++            dst++;
++        }
++    }
++
++
++
++}
++
++void fbCompositeTransformNearestNonrotatedAffineTrivialclipRepeat_a8r8g8b8_over_x8r8g8b8 (FbComposeData *params,
++    FbBits *bits, int stride, CARD32 vv0, CARD32 vv1, CARD32 uv0, CARD32 uv1)
++{
++    CARD32  *dstLine, *dst;
++    CARD32 d;
++    CARD32  s;
++    FbStride    dstStride;
++    CARD8   a;
++    CARD16  w, h;
++    FbBits *xbits;
++    int x, y;
++    CARD32 orig_vv0 = vv0;
++    CARD32 max_vv0, max_vv1;
++
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD32, dstStride, dstLine, 1);
++
++    max_vv0 = params->src->pDrawable->width << 16;
++    max_vv1 = params->src->pDrawable->height << 16;
++
++    while (orig_vv0 >= max_vv0) orig_vv0 -= max_vv0;
++    while (vv1 >= max_vv1) vv1 -= max_vv1;
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++
++        y = vv1 >> 16;
++        vv1 += uv1;
++        while (vv1 >= max_vv1) vv1 -= max_vv1;
++
++        xbits = bits + stride * y;
++
++        w = params->width;
++        vv0 = orig_vv0;
++        while (w--)
++        {
++            x = vv0 >> 16;
++            s = READ((CARD32 *)xbits + x);
++            vv0 += uv0;
++            while (vv0 >= max_vv0) vv0 -= max_vv0;
++
++            a = s >> 24;
++            if (a == 0xff)
++                WRITE(dst, s & 0xffffff);
++            else if (a) {
++                d = READ(dst);
++                a ^= 0xff;
++                FbByteMulAdd_store_x8r8g8b8(d, a, s);
++                WRITE(dst, d);
++            }
++            dst++;
++        }
++    }
++
++
++
++}
++
++void fbCompositeTransformNearestNonrotatedAffineTrivialclip_a8r8g8b8_over_r5g6b5 (FbComposeData *params,
++    FbBits *bits, int stride, CARD32 vv0, CARD32 vv1, CARD32 uv0, CARD32 uv1)
++{
++    CARD16  *dstLine, *dst;
++    CARD32 d;
++    CARD32  s1, s2;
++    FbStride    dstStride;
++    CARD8   a1, a2;
++    int  w, h;
++    FbBits *xbits;
++    int x1, x2, y;
++    CARD32 orig_vv0 = vv0;
++
++    BoxRec box = params->src->pCompositeClip->extents;
++
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16, dstStride, dstLine, 1);
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++
++        y = vv1 >> 16;
++        vv1 += uv1;
++
++        if ((y < box.y1) || (y >= box.y2)) {
++            continue;
++        }
++
++        xbits = bits + stride * y;
++
++        w = params->width;
++        vv0 = orig_vv0;
++        while ((w -= 2) >= 0)
++        {
++            x1 = vv0 >> 16;
++            vv0 += uv0;
++            s1 = READ((CARD32 *)xbits + x1);
++            x2 = vv0 >> 16;
++            vv0 += uv0;
++            s2 = READ((CARD32 *)xbits + x2);
++
++            a1 = s1 >> 24;
++            a2 = s2 >> 24;
++
++            if (a1)
++            {
++                if (a1 == 0xff)
++                    d = cvt8888to0565(s1);
++                else
++                {
++                    d = cvt0565to8888(READ(dst));
++                    a1 ^= 0xff;
++                    FbByteMulAdd_store_r5g6b5(d, a1, s1);
++                }
++                WRITE(dst, d);
++            }
++            dst++;
++
++            if (a2)
++            {
++                if (a2 == 0xff)
++                    d = cvt8888to0565(s2);
++                else
++                {
++                    d = cvt0565to8888(READ(dst));
++                    a2 ^= 0xff;
++                    FbByteMulAdd_store_r5g6b5(d, a2, s2);
++                }
++                WRITE(dst, d);
++            }
++            dst++;
++        }
++        if (w & 1)
++        {
++            x1 = vv0 >> 16;
++            s1 = READ((CARD32 *)xbits + x1);
++            vv0 += uv0;
++
++            a1 = s1 >> 24;
++            if (a1)
++            {
++                if (a1 == 0xff)
++                    d = cvt8888to0565(s1);
++                else
++                {
++                    d = cvt0565to8888(READ(dst));
++                    a1 ^= 0xff;
++                    FbByteMulAdd_store_r5g6b5(d, a1, s1);
++                }
++                WRITE(dst, d);
++            }
++            dst++;
++        }
++    }
++
++
++
++}
++
++void fbCompositeTransformNearestNonrotatedAffineTrivialclipRepeat_a8r8g8b8_over_r5g6b5 (FbComposeData *params,
++    FbBits *bits, int stride, CARD32 vv0, CARD32 vv1, CARD32 uv0, CARD32 uv1)
++{
++    CARD16  *dstLine, *dst;
++    CARD32 d;
++    CARD32  s;
++    FbStride    dstStride;
++    CARD8   a;
++    CARD16  w, h;
++    FbBits *xbits;
++    int x, y;
++    CARD32 orig_vv0 = vv0;
++    CARD32 max_vv0, max_vv1;
++
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16, dstStride, dstLine, 1);
++
++    max_vv0 = params->src->pDrawable->width << 16;
++    max_vv1 = params->src->pDrawable->height << 16;
++
++    while (orig_vv0 >= max_vv0) orig_vv0 -= max_vv0;
++    while (vv1 >= max_vv1) vv1 -= max_vv1;
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++
++        y = vv1 >> 16;
++        vv1 += uv1;
++        while (vv1 >= max_vv1) vv1 -= max_vv1;
++
++        xbits = bits + stride * y;
++
++        w = params->width;
++        vv0 = orig_vv0;
++        while (w--)
++        {
++            x = vv0 >> 16;
++            s = READ((CARD32 *)xbits + x);
++            vv0 += uv0;
++            while (vv0 >= max_vv0) vv0 -= max_vv0;
++
++            a = s >> 24;
++            if (a)
++            {
++                if (a == 0xff)
++                    d = cvt8888to0565(s);
++                else
++                {
++                    d = cvt0565to8888(READ(dst));
++                    a ^= 0xff;
++                    FbByteMulAdd_store_r5g6b5(d, a, s);
++                }
++                WRITE(dst, d);
++            }
++            dst++;
++        }
++    }
++
++
++
++}
++
++void fbCompositeTransformNearestNonrotatedAffineTrivialclip_r5g6b5_src_r5g6b5 (FbComposeData *params,
++    FbBits *bits, int stride, CARD32 vv0, CARD32 vv1, CARD32 uv0, CARD32 uv1)
++{
++    CARD16  *dstLine, *dst;
++    CARD16 d1, d2;
++    FbStride    dstStride;
++    int  w, h;
++    FbBits *xbits;
++    int x1, x2, y;
++    CARD32 orig_vv0 = vv0;
++
++    BoxRec box = params->src->pCompositeClip->extents;
++
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16, dstStride, dstLine, 1);
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++
++        y = vv1 >> 16;
++        vv1 += uv1;
++
++        if ((y < box.y1) || (y >= box.y2)) {
++            continue;
++        }
++
++        xbits = bits + stride * y;
++
++        w = params->width;
++        vv0 = orig_vv0;
++
++        while ((w -= 2) >= 0)
++        {
++            x1 = vv0 >> 16;
++            vv0 += uv0;
++            d1 = READ((CARD16 *)xbits + x1);
++            x2 = vv0 >> 16;
++            vv0 += uv0;
++            d2 = READ((CARD16 *)xbits + x2);
++            WRITE(dst++, d1);
++            WRITE(dst++, d2);
++        }
++        if (w & 1)
++        {
++            x1 = vv0 >> 16;
++            vv0 += uv0;
++            WRITE(dst++, READ((CARD16 *)xbits + x1));
++        }
++    }
++
++
++
++}
++
++void fbCompositeTransformNearestNonrotatedAffineTrivialclipRepeat_r5g6b5_src_r5g6b5 (FbComposeData *params,
++    FbBits *bits, int stride, CARD32 vv0, CARD32 vv1, CARD32 uv0, CARD32 uv1)
++{
++    CARD16  *dstLine, *dst;
++    FbStride    dstStride;
++    CARD16  w, h;
++    FbBits *xbits;
++    int x, y;
++    CARD32 orig_vv0 = vv0;
++    CARD32 max_vv0, max_vv1;
++
++    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD16, dstStride, dstLine, 1);
++
++    max_vv0 = params->src->pDrawable->width << 16;
++    max_vv1 = params->src->pDrawable->height << 16;
++
++    while (orig_vv0 >= max_vv0) orig_vv0 -= max_vv0;
++    while (vv1 >= max_vv1) vv1 -= max_vv1;
++
++    h = params->height;
++    while (h--)
++    {
++        dst = dstLine;
++        dstLine += dstStride;
++
++        y = vv1 >> 16;
++        vv1 += uv1;
++        while (vv1 >= max_vv1) vv1 -= max_vv1;
++
++        xbits = bits + stride * y;
++
++        w = params->width;
++        vv0 = orig_vv0;
++        while (w--)
++        {
++            x = vv0 >> 16;
++            vv0 += uv0;
++            while (vv0 >= max_vv0) vv0 -= max_vv0;
++            WRITE(dst++, READ((CARD16 *)xbits + x));
++        }
++    }
++
++
++
++}
++
++/**
++ * Check if the clipping boundary is crossed on horizontal scaling
++ */
++static int fbTransformVerifyHorizontalClipping(PicturePtr pict, int width, CARD32 vv0, CARD32 uv0)
++{
++    BoxRec box = pict->pCompositeClip->extents;
++
++    while (--width >= 0) {
++        int x = vv0 >> 16;
++        if ((x < box.x1) || (x >= box.x2)) return 1;
++        vv0 += uv0;
++    }
++
++    return 0;
++}
++
++/**
++ * Easy case of transform without rotation or complicated clipping
++ */
++void fbCompositeTransformNonrotatedAffineTrivialclip (FbComposeData *params)
++{
++    PictVector  v;
++    PictVector  unit;
++    int         bpp;
++    int         xoff, yoff, x = params->xSrc, y = params->ySrc;
++    FbBits     *bits;
++    FbStride    stride;
++
++    if (params->src->pDrawable->x || params->src->pDrawable->y) {
++        /* fallback to general case */
++        fbCompositeGeneral(params);
++        return;
++    }
++
++    fbGetDrawable(params->src->pDrawable, bits, stride, bpp, xoff, yoff);
++    x += xoff;
++    y += yoff;
++
++    /* reference point is the center of the pixel */
++    v.vector[0] = IntToxFixed(x) + xFixed1/2;
++    v.vector[1] = IntToxFixed(y) + xFixed1/2;
++    v.vector[2] = xFixed1;
++
++    PictureTransformPoint3d (params->src->transform, &v);
++    
++    if (v.vector[2] != xFixed1) {
++
++        fbCompositeGeneral(params);
++        return;
++    }
++
++    unit.vector[0] = params->src->transform->matrix[0][0];
++    unit.vector[1] = params->src->transform->matrix[1][1];
++
++    if (params->src->repeat == RepeatNone
++        && fbTransformVerifyHorizontalClipping(params->src, params->width, v.vector[0], unit.vector[0])) {
++
++        fbCompositeGeneral(params);
++        return;
++    }
++
++    if (params->op == PictOpSrc && params->src->format == PICT_r5g6b5 && params->dest->format == PICT_r5g6b5) {
++        if (params->src->filter == PictFilterNearest && params->src->repeat == RepeatNone) {
++            fbCompositeTransformNearestNonrotatedAffineTrivialclip_r5g6b5_src_r5g6b5(params,
++                bits, stride, v.vector[0], v.vector[1], unit.vector[0], unit.vector[1]);
++            return;
++        }
++        if (params->src->filter == PictFilterNearest && params->src->repeat == RepeatNormal) {
++            fbCompositeTransformNearestNonrotatedAffineTrivialclipRepeat_r5g6b5_src_r5g6b5(params,
++                bits, stride, v.vector[0], v.vector[1], unit.vector[0], unit.vector[1]);
++            return;
++        }
++    }
++
++    if (params->op == PictOpOver && params->src->format == PICT_a8r8g8b8 && params->dest->format == PICT_r5g6b5) {
++        if (params->src->filter == PictFilterNearest && params->src->repeat == RepeatNone) {
++            fbCompositeTransformNearestNonrotatedAffineTrivialclip_a8r8g8b8_over_r5g6b5(params,
++                bits, stride, v.vector[0], v.vector[1], unit.vector[0], unit.vector[1]);
++            return;
++        }
++        if (params->src->filter == PictFilterNearest && params->src->repeat == RepeatNormal) {
++            fbCompositeTransformNearestNonrotatedAffineTrivialclipRepeat_a8r8g8b8_over_r5g6b5(params,
++                bits, stride, v.vector[0], v.vector[1], unit.vector[0], unit.vector[1]);
++            return;
++        }
++    }
++
++    if (params->op == PictOpOver && params->src->format == PICT_a8r8g8b8 && params->dest->format == PICT_x8r8g8b8) {
++        if (params->src->filter == PictFilterNearest && params->src->repeat == RepeatNone) {
++            fbCompositeTransformNearestNonrotatedAffineTrivialclip_a8r8g8b8_over_x8r8g8b8(params,
++                bits, stride, v.vector[0], v.vector[1], unit.vector[0], unit.vector[1]);
++            return;
++        }
++        if (params->src->filter == PictFilterNearest && params->src->repeat == RepeatNormal) {
++            fbCompositeTransformNearestNonrotatedAffineTrivialclipRepeat_a8r8g8b8_over_x8r8g8b8(params,
++                bits, stride, v.vector[0], v.vector[1], unit.vector[0], unit.vector[1]);
++            return;
++        }
++    }
++
++
++    fbCompositeGeneral(params);
+ }
+ 
+ # define mod(a,b)	((b) == 1 ? 0 : (a) >= 0 ? (a) % (b) : (b) - (-a) % (b))
+ 
+ void
+-fbComposite (int      op,
++fbComposite (CARD8      op,
+ 	     PicturePtr pSrc,
+ 	     PicturePtr pMask,
+ 	     PicturePtr pDst,
+-	     int      xSrc,
+-	     int      ySrc,
+-	     int      xMask,
+-	     int      yMask,
+-	     int      xDst,
+-	     int      yDst,
+-	     int     width,
+-	     int     height)
++	     INT16      xSrc,
++	     INT16      ySrc,
++	     INT16      xMask,
++	     INT16      yMask,
++	     INT16      xDst,
++	     INT16      yDst,
++	     CARD16     width,
++	     CARD16     height)
+ {
+     RegionRec	    region;
+     int		    n;
+     BoxPtr	    pbox;
+     CompositeFunc   func = NULL;
++    FbComposeData   params;
+     Bool	    srcRepeat = pSrc->pDrawable && pSrc->repeat;
+     Bool	    maskRepeat = FALSE;
+     Bool	    srcAlphaMap = pSrc->alphaMap != 0;
+     Bool	    maskAlphaMap = FALSE;
+     Bool	    dstAlphaMap = pDst->alphaMap != 0;
+-    int		    x_msk, y_msk, x_src, y_src, x_dst, y_dst;
+-    int		    w, h, w_this, h_this;
++    int		    w, h;
+ 
+ #ifdef USE_MMX
+     static Bool mmx_setup = FALSE;
+@@ -1011,6 +1620,10 @@ fbComposite (int      op,
+         && (!pMask || pMask->filter != PictFilterConvolution))
+     switch (op) {
+     case PictOpSrc:
++	if (!pMask && pSrc->format == pDst->format && pSrc->pDrawable != pDst->pDrawable)
++	{
++	    func = fbCompositeCopyArea;
++	}
+ #ifdef USE_MMX
+ 	if (!pMask && pSrc->format == pDst->format &&
+ 	    pSrc->format != PICT_a8 && pSrc->pDrawable != pDst->pDrawable)
+@@ -1018,6 +1631,12 @@ fbComposite (int      op,
+ 	    func = fbCompositeCopyAreammx;
+ 	}
+ #endif
++#ifdef USE_ARMV6
++	if (!pMask && pSrc->format == PICT_x8r8g8b8 && pDst->format == PICT_r5g6b5)
++	{
++        func = fbComposite_x8r8g8b8_src_r5g6b5_armv6;
++    }
++#endif
+ 	break;
+     case PictOpOver:
+ 	if (pMask)
+@@ -1032,12 +1651,14 @@ fbComposite (int      op,
+ 			switch (pDst->format) {
+ 			case PICT_r5g6b5:
+ 			case PICT_b5g6r5:
++			    func = fbCompositeSolidMask_nx8x0565;
+ #ifdef USE_MMX
+ 			    if (fbHaveMMX())
+ 				func = fbCompositeSolidMask_nx8x0565mmx;
+-			    else
+ #endif
+-				func = fbCompositeSolidMask_nx8x0565;
++#ifdef USE_ARMV6
++			    func = fbCompositeSolidMask_nx8x0565_armv6;
++#endif
+ 			    break;
+ 			case PICT_r8g8b8:
+ 			case PICT_b8g8r8:
+@@ -1152,6 +1773,7 @@ fbComposite (int      op,
+ #endif
+ 				break;
+ 			    case PICT_r5g6b5:
++				func = fbCompositeSrc_8888RevNPx0565;
+ #ifdef USE_MMX
+ 				if (fbHaveMMX())
+ 				    func = fbCompositeSrc_8888RevNPx0565mmx;
+@@ -1181,9 +1803,7 @@ fbComposite (int      op,
+ #ifdef USE_MMX
+ 				if (fbHaveMMX())
+ 				    func = fbCompositeSrc_8888RevNPx0565mmx;
+-                                else
+ #endif
+-                                    func = fbCompositeSrc_8888RevNPx0565;
+ 				break;
+ 			    default:
+ 				break;
+@@ -1251,7 +1871,7 @@ fbComposite (int      op,
+ 		    break;
+ 		}
+ 	    }
+-	    else if (! srcRepeat)
++	    else
+ 	    {
+ 		switch (pSrc->format) {
+ 		case PICT_a8r8g8b8:
+@@ -1263,13 +1883,13 @@ fbComposite (int      op,
+ 			    func = fbCompositeSrc_8888x8888mmx;
+ 			else
+ #endif
+-			    func = fbCompositeSrc_8888x8888;
++			    func = fbComposite_a8r8g8b8_over_x8r8g8b8;
+ 			break;
+ 		    case PICT_r8g8b8:
+ 			func = fbCompositeSrc_8888x0888;
+ 			break;
+ 		    case PICT_r5g6b5:
+-			func = fbCompositeSrc_8888x0565;
++			func = fbComposite_a8r8g8b8_over_r5g6b5;
+ 			break;
+ 		    default:
+ 			break;
+@@ -1309,13 +1929,13 @@ fbComposite (int      op,
+ 			    func = fbCompositeSrc_8888x8888mmx;
+ 			else
+ #endif
+-			    func = fbCompositeSrc_8888x8888;
++			    func = fbComposite_a8r8g8b8_over_x8r8g8b8;
+ 			break;
+ 		    case PICT_b8g8r8:
+ 			func = fbCompositeSrc_8888x0888;
+ 			break;
+ 		    case PICT_b5g6r5:
+-			func = fbCompositeSrc_8888x0565;
++			func = fbComposite_a8r8g8b8_over_r5g6b5;
+ 			break;
+ 		    default:
+ 			break;
+@@ -1380,12 +2000,12 @@ fbComposite (int      op,
+ 	    case PICT_a8:
+ 		switch (pDst->format) {
+ 		case PICT_a8:
++		    func = fbCompositeSrcAdd_8000x8000;
+ #ifdef USE_MMX
+ 		    if (fbHaveMMX())
+ 			func = fbCompositeSrcAdd_8000x8000mmx;
+-		    else
+ #endif
+-			func = fbCompositeSrcAdd_8000x8000;
++
+ 		    break;
+ 		default:
+ 		    break;
+@@ -1407,9 +2027,34 @@ fbComposite (int      op,
+ 	break;
+     }
+ 
++    /* Support for some simple, but quite common cases of scaling (assume affine transform and no rotation) */
++    if (pSrc->pDrawable && !pMask
++        && pSrc->transform && pSrc->filter == PictFilterNearest
++        && pSrc->transform->matrix[1][0] == 0
++        && pSrc->transform->matrix[2][0] == 0
++        && REGION_NUM_RECTS(pSrc->pCompositeClip) == 1
++        && !srcAlphaMap && !dstAlphaMap)
++    {
++        func = fbCompositeTransformNonrotatedAffineTrivialclip;
++        srcRepeat = 0; /* XXX this is needed in order to prevent the code below from screwing up source picture data */
++    }
++
++    params.op = op;
++    params.src = pSrc;
++    params.mask = pMask;
++    params.dest = pDst;
++    params.xSrc = xSrc;
++    params.ySrc = ySrc;
++    params.xMask = xMask;
++    params.yMask = yMask;
++    params.xDest = xDst;
++    params.yDest = yDst;
++    params.width = width;
++    params.height = height;
++
+     if (!func) {
+          /* no fast path, use the general code */
+-         fbCompositeGeneral(op, pSrc, pMask, pDst, xSrc, ySrc, xMask, yMask, xDst, yDst, width, height);
++         fbCompositeGeneral(&params);
+          return;
+     }
+ 
+@@ -1432,59 +2077,63 @@ fbComposite (int      op,
+     while (n--)
+     {
+ 	h = pbox->y2 - pbox->y1;
+-	y_src = pbox->y1 - yDst + ySrc;
+-	y_msk = pbox->y1 - yDst + yMask;
+-	y_dst = pbox->y1;
++	params.ySrc = pbox->y1 - yDst + ySrc;
++	params.yMask = pbox->y1 - yDst + yMask;
++	params.yDest = pbox->y1;
+ 	while (h)
+ 	{
+-	    h_this = h;
++	    params.height = h;
+ 	    w = pbox->x2 - pbox->x1;
+-	    x_src = pbox->x1 - xDst + xSrc;
+-	    x_msk = pbox->x1 - xDst + xMask;
+-	    x_dst = pbox->x1;
++	    params.xSrc = pbox->x1 - xDst + xSrc;
++	    params.xMask = pbox->x1 - xDst + xMask;
++	    params.xDest = pbox->x1;
+ 	    if (maskRepeat)
+ 	    {
+-		y_msk = mod (y_msk - pMask->pDrawable->y, pMask->pDrawable->height);
+-		if (h_this > pMask->pDrawable->height - y_msk)
+-		    h_this = pMask->pDrawable->height - y_msk;
+-		y_msk += pMask->pDrawable->y;
++		params.yMask = mod (params.yMask - pMask->pDrawable->y,
++                                    pMask->pDrawable->height);
++		if (params.height > pMask->pDrawable->height - params.yMask)
++		    params.height = pMask->pDrawable->height - params.yMask;
++		params.yMask += pMask->pDrawable->y;
+ 	    }
+ 	    if (srcRepeat)
+ 	    {
+-		y_src = mod (y_src - pSrc->pDrawable->y, pSrc->pDrawable->height);
+-		if (h_this > pSrc->pDrawable->height - y_src)
+-		    h_this = pSrc->pDrawable->height - y_src;
+-		y_src += pSrc->pDrawable->y;
++		params.ySrc = mod (params.ySrc - pSrc->pDrawable->y,
++                                   pSrc->pDrawable->height);
++		if (params.height > pSrc->pDrawable->height - params.ySrc)
++		    params.height = pSrc->pDrawable->height - params.ySrc;
++		params.ySrc += pSrc->pDrawable->y;
+ 	    }
+ 	    while (w)
+ 	    {
+-		w_this = w;
++		params.width = w;
+ 		if (maskRepeat)
+ 		{
+-		    x_msk = mod (x_msk - pMask->pDrawable->x, pMask->pDrawable->width);
+-		    if (w_this > pMask->pDrawable->width - x_msk)
+-			w_this = pMask->pDrawable->width - x_msk;
+-		    x_msk += pMask->pDrawable->x;
++		    params.xMask = mod (params.xMask - pMask->pDrawable->x,
++                                        pMask->pDrawable->width);
++		    if (params.width > pMask->pDrawable->width - params.xMask)
++			params.width = pMask->pDrawable->width - params.xMask;
++		    params.xMask += pMask->pDrawable->x;
+ 		}
+ 		if (srcRepeat)
+ 		{
+-		    x_src = mod (x_src - pSrc->pDrawable->x, pSrc->pDrawable->width);
+-		    if (w_this > pSrc->pDrawable->width - x_src)
+-			w_this = pSrc->pDrawable->width - x_src;
+-		    x_src += pSrc->pDrawable->x;
++		    params.xSrc = mod (params.xSrc - pSrc->pDrawable->x,
++                                       pSrc->pDrawable->width);
++		    if (params.width > pSrc->pDrawable->width - params.xSrc)
++			params.width = pSrc->pDrawable->width - params.xSrc;
++		    params.xSrc += pSrc->pDrawable->x;
+ 		}
+-		(*func) (op, pSrc, pMask, pDst,
+-			 x_src, y_src, x_msk, y_msk, x_dst, y_dst,
+-			 w_this, h_this);
+-		w -= w_this;
+-		x_src += w_this;
+-		x_msk += w_this;
+-		x_dst += w_this;
++
++		(*func) (&params);
++
++		w -= params.width;
++		params.xSrc += params.width;
++		params.xMask += params.width;
++		params.xDest += params.width;
+ 	    }
+-	    h -= h_this;
+-	    y_src += h_this;
+-	    y_msk += h_this;
+-	    y_dst += h_this;
++	    h -= params.height;
++	    params.ySrc += params.height;
++	    params.yMask += params.height;
++	    params.yDest += params.height;
+ 	}
+ 	pbox++;
+     }
+@@ -1610,7 +2259,9 @@ static unsigned int detectCPUFeatures(void) {
+             features |= SSE;
+         if (result & (1 << 26))
+             features |= SSE2;
+-        if ((result & MMX) && !(result & SSE) && (strcmp(vendor, "AuthenticAMD") == 0)) {
++        if ((features & MMX) && !(features & SSE) &&
++            (strcmp(vendor, "AuthenticAMD") == 0 ||
++             strcmp(vendor, "Geode by NSC") == 0)) {
+             /* check for AMD MMX extensions */
+ 
+             unsigned int result;            
+diff --git a/fb/fbpict.h b/fb/fbpict.h
+index 73d7f1d..175ccc4 100644
+--- a/fb/fbpict.h
++++ b/fb/fbpict.h
+@@ -29,7 +29,7 @@
+ #define _FBPICT_H_
+ 
+ #include "renderedge.h"
+-
++#include "picturestr.h"
+ 
+ #if defined(__GNUC__)
+ #define INLINE __inline__
+@@ -105,9 +105,6 @@ fbCanGetSolid(PicturePtr pict)
+     }
+ }
+ 
+-#define fbCanGetSolid(pict) \
+-(pict->pDrawable != NULL && pict->pDrawable->width == 1 && pict->pDrawable->height == 1)
+-
+ #define fbComposeGetSolid(pict, bits, fmt) { \
+     FbBits	*__bits__; \
+     FbStride	__stride__; \
+@@ -117,13 +114,13 @@ fbCanGetSolid(PicturePtr pict)
+     fbGetDrawable((pict)->pDrawable,__bits__,__stride__,__bpp__,__xoff__,__yoff__); \
+     switch (__bpp__) { \
+     case 32: \
+-	(bits) = *(CARD32 *) __bits__; \
++	(bits) = READ((CARD32 *) __bits__); \
+ 	break; \
+     case 24: \
+ 	(bits) = Fetch24 ((CARD8 *) __bits__); \
+ 	break; \
+     case 16: \
+-	(bits) = *(CARD16 *) __bits__; \
++	(bits) = READ((CARD16 *) __bits__); \
+ 	(bits) = cvt0565to8888(bits); \
+ 	break; \
+     default: \
+@@ -161,22 +158,22 @@ fbCanGetSolid(PicturePtr pict)
+ 
+ #if IMAGE_BYTE_ORDER == MSBFirst
+ #define Fetch24(a)  ((unsigned long) (a) & 1 ? \
+-		     ((*(a) << 16) | *((CARD16 *) ((a)+1))) : \
+-		     ((*((CARD16 *) (a)) << 8) | *((a)+2)))
++		     ((READ(a) << 16) | READ((CARD16 *) ((a)+1))) : \
++		     ((READ((CARD16 *) (a)) << 8) | READ((a)+2)))
+ #define Store24(a,v) ((unsigned long) (a) & 1 ? \
+-		      ((*(a) = (CARD8) ((v) >> 16)), \
+-		       (*((CARD16 *) ((a)+1)) = (CARD16) (v))) : \
+-		      ((*((CARD16 *) (a)) = (CARD16) ((v) >> 8)), \
+-		       (*((a)+2) = (CARD8) (v))))
++		      (WRITE(a, (CARD8) ((v) >> 16)), \
++		       WRITE((CARD16 *) ((a)+1), (CARD16) (v))) : \
++		      (WRITE((CARD16 *) (a), (CARD16) ((v) >> 8)), \
++		       WRITE((a)+2, (CARD8) (v))))
+ #else
+ #define Fetch24(a)  ((unsigned long) (a) & 1 ? \
+-		     ((*(a)) | (*((CARD16 *) ((a)+1)) << 8)) : \
+-		     ((*((CARD16 *) (a))) | (*((a)+2) << 16)))
++		     (READ(a) | (READ((CARD16 *) ((a)+1)) << 8)) : \
++		     (READ((CARD16 *) (a)) | (READ((a)+2) << 16)))
+ #define Store24(a,v) ((unsigned long) (a) & 1 ? \
+-		      ((*(a) = (CARD8) (v)), \
+-		       (*((CARD16 *) ((a)+1)) = (CARD16) ((v) >> 8))) : \
+-		      ((*((CARD16 *) (a)) = (CARD16) (v)),\
+-		       (*((a)+2) = (CARD8) ((v) >> 16))))
++		      (WRITE(a, (CARD8) (v)), \
++		       WRITE((CARD16 *) ((a)+1), (CARD16) ((v) >> 8))) : \
++		      (WRITE((CARD16 *) (a), (CARD16) (v)),\
++		       WRITE((a)+2, (CARD8) ((v) >> 16))))
+ #endif
+ 		      
+ /*
+@@ -219,6 +216,43 @@ fbCanGetSolid(PicturePtr pict)
+         x += t;                                                     \
+     } while (0)
+ 
++#define FbByteMulAdd_store_r5g6b5(x, a, y) do {                   \
++        CARD32 t = ((x & 0xff00ff) * a) + 0x800080;               \
++        t = (t + ((t >> 8) & 0xff00ff)) >> 8;                     \
++        t &= 0xff00ff;                                            \
++        t += y & 0xff00ff;                                        \
++        t |= 0x1000100 - ((t >> 8) & 0xff00ff);                   \
++        t &= 0xff00ff;                                            \
++                                                                  \
++        x = (((x >> 8) & 0xff00ff) * a) + 0x800080;                 \
++        x = (x + ((x >> 8) & 0xff00ff)) >> 8;                       \
++        x &= 0xff00ff;                                              \
++        x += (y >> 8) & 0xff00ff;                                   \
++        x |= 0x1000100 - ((x >> 8) & 0xff00ff);                     \
++        x &= 0xff00ff;                                              \
++        x <<= 8;                                                    \
++        x += t;                                                     \
++        x = cvt8888to0565(x);                                       \
++    } while (0)
++
++#define FbByteMulAdd_store_x8r8g8b8(x, a, y) do {                 \
++        CARD32 t = ((x & 0xff00ff) * a) + 0x800080;               \
++        t = (t + ((t >> 8) & 0xff00ff)) >> 8;                     \
++        t &= 0xff00ff;                                            \
++        t += y & 0xff00ff;                                        \
++        t |= 0x1000100 - ((t >> 8) & 0xff00ff);                   \
++        t &= 0xff00ff;                                            \
++                                                                  \
++        x = (((x >> 8) & 0xff00ff) * a) + 0x800080;                 \
++        x = (x + ((x >> 8) & 0xff00ff)) >> 8;                       \
++        x &= 0xff00ff;                                              \
++        x += (y >> 8) & 0xff00ff;                                   \
++        x |= 0x1000100 - ((x >> 8) & 0xff00ff);                     \
++        x &= 0xff;                                                  \
++        x <<= 8;                                                    \
++        x += t;                                                     \
++    } while (0)
++
+ /*
+   x_c = (x_c * a + y_c * b) / 255
+ */
+@@ -362,6 +396,8 @@ fbCanGetSolid(PicturePtr pict)
+ #define FASTCALL
+ #endif
+ 
++typedef void  (*CompositeFunc) (FbComposeData *params);
++
+ typedef FASTCALL void (*CombineMaskU) (CARD32 *src, const CARD32 *mask, int width);
+ typedef FASTCALL void (*CombineFuncU) (CARD32 *dest, const CARD32 *src, int width);
+ typedef FASTCALL void (*CombineFuncC) (CARD32 *dest, CARD32 *src, CARD32 *mask, int width);
+@@ -375,18 +411,7 @@ typedef struct _FbComposeFunctions {
+ /* fbcompose.c */
+ 
+ void
+-fbCompositeGeneral (CARD8	op,
+-		    PicturePtr	pSrc,
+-		    PicturePtr	pMask,
+-		    PicturePtr	pDst,
+-		    INT16	xSrc,
+-		    INT16	ySrc,
+-		    INT16	xMask,
+-		    INT16	yMask,
+-		    INT16	xDst,
+-		    INT16	yDst,
+-		    CARD16	width,
+-		    CARD16	height);
++fbCompositeGeneral (FbComposeData *params);
+ 
+ 
+ /* fbedge.c */
+@@ -411,200 +436,57 @@ CARD32
+ fbIn (CARD32 x, CARD8 y);
+ 
+ void
+-fbCompositeSolidMask_nx8x8888 (CARD8      op,
+-			       PicturePtr pSrc,
+-			       PicturePtr pMask,
+-			       PicturePtr pDst,
+-			       INT16      xSrc,
+-			       INT16      ySrc,
+-			       INT16      xMask,
+-			       INT16      yMask,
+-			       INT16      xDst,
+-			       INT16      yDst,
+-			       CARD16     width,
+-			       CARD16     height);
++fbCompositeSolidMask_nx8x8888 (FbComposeData *params);
+ 
+ void
+-fbCompositeSolidMask_nx8x0888 (CARD8      op,
+-			       PicturePtr pSrc,
+-			       PicturePtr pMask,
+-			       PicturePtr pDst,
+-			       INT16      xSrc,
+-			       INT16      ySrc,
+-			       INT16      xMask,
+-			       INT16      yMask,
+-			       INT16      xDst,
+-			       INT16      yDst,
+-			       CARD16     width,
+-			       CARD16     height);
++fbCompositeSolidMask_nx8x0888 (FbComposeData *params);
+ 
+ void
+-fbCompositeSolidMask_nx8888x8888C (CARD8      op,
+-				   PicturePtr pSrc,
+-				   PicturePtr pMask,
+-				   PicturePtr pDst,
+-				   INT16      xSrc,
+-				   INT16      ySrc,
+-				   INT16      xMask,
+-				   INT16      yMask,
+-				   INT16      xDst,
+-				   INT16      yDst,
+-				   CARD16     width,
+-				   CARD16     height);
++fbCompositeSolidMask_nx8888x8888C (FbComposeData *params);
+ 
+ void
+-fbCompositeSolidMask_nx8x0565 (CARD8      op,
+-			       PicturePtr pSrc,
+-			       PicturePtr pMask,
+-			       PicturePtr pDst,
+-			       INT16      xSrc,
+-			       INT16      ySrc,
+-			       INT16      xMask,
+-			       INT16      yMask,
+-			       INT16      xDst,
+-			       INT16      yDst,
+-			       CARD16     width,
+-			       CARD16     height);
++fbCompositeSolidMask_nx8x0565 (FbComposeData *params);
+ 
+ void
+-fbCompositeSolidMask_nx8888x0565C (CARD8      op,
+-				   PicturePtr pSrc,
+-				   PicturePtr pMask,
+-				   PicturePtr pDst,
+-				   INT16      xSrc,
+-				   INT16      ySrc,
+-				   INT16      xMask,
+-				   INT16      yMask,
+-				   INT16      xDst,
+-				   INT16      yDst,
+-				   CARD16     width,
+-				   CARD16     height);
++fbCompositeSolidMask_nx8888x0565C (FbComposeData *params);
+ 
+ void
+-fbCompositeSrc_8888x8888 (CARD8      op,
+-			  PicturePtr pSrc,
+-			  PicturePtr pMask,
+-			  PicturePtr pDst,
+-			  INT16      xSrc,
+-			  INT16      ySrc,
+-			  INT16      xMask,
+-			  INT16      yMask,
+-			  INT16      xDst,
+-			  INT16      yDst,
+-			  CARD16     width,
+-			  CARD16     height);
++fbCompositeSrc_8888x8888 (FbComposeData *params);
+ 
+ void
+-fbCompositeSrc_8888x0888 (CARD8      op,
+-			 PicturePtr pSrc,
+-			 PicturePtr pMask,
+-			 PicturePtr pDst,
+-			 INT16      xSrc,
+-			 INT16      ySrc,
+-			 INT16      xMask,
+-			 INT16      yMask,
+-			 INT16      xDst,
+-			 INT16      yDst,
+-			 CARD16     width,
+-			 CARD16     height);
++fbCompositeSrc_8888x0888 (FbComposeData *params);
+ 
+ void
+-fbCompositeSrc_8888x0565 (CARD8      op,
+-			  PicturePtr pSrc,
+-			  PicturePtr pMask,
+-			  PicturePtr pDst,
+-			  INT16      xSrc,
+-			  INT16      ySrc,
+-			  INT16      xMask,
+-			  INT16      yMask,
+-			  INT16      xDst,
+-			  INT16      yDst,
+-			  CARD16     width,
+-			  CARD16     height);
++fbCompositeSrc_8888x0565 (FbComposeData *params);
+ 
+ void
+-fbCompositeSrc_0565x0565 (CARD8      op,
+-			  PicturePtr pSrc,
+-			  PicturePtr pMask,
+-			  PicturePtr pDst,
+-			  INT16      xSrc,
+-			  INT16      ySrc,
+-			  INT16      xMask,
+-			  INT16      yMask,
+-			  INT16      xDst,
+-			  INT16      yDst,
+-			  CARD16     width,
+-			  CARD16     height);
++fbCompositeSrc_0565x0565 (FbComposeData *params);
+ 
+ void
+-fbCompositeSrcAdd_8000x8000 (CARD8	op,
+-			     PicturePtr pSrc,
+-			     PicturePtr pMask,
+-			     PicturePtr pDst,
+-			     INT16      xSrc,
+-			     INT16      ySrc,
+-			     INT16      xMask,
+-			     INT16      yMask,
+-			     INT16      xDst,
+-			     INT16      yDst,
+-			     CARD16     width,
+-			     CARD16     height);
++fbCompositeSrcAdd_8000x8000 (FbComposeData *params);
+ 
+ void
+-fbCompositeSrcAdd_8888x8888 (CARD8	op,
+-			     PicturePtr pSrc,
+-			     PicturePtr pMask,
+-			     PicturePtr pDst,
+-			     INT16      xSrc,
+-			     INT16      ySrc,
+-			     INT16      xMask,
+-			     INT16      yMask,
+-			     INT16      xDst,
+-			     INT16      yDst,
+-			     CARD16     width,
+-			     CARD16     height);
++fbCompositeSrcAdd_8888x8888 (FbComposeData *params);
+ 
+ void
+-fbCompositeSrcAdd_1000x1000 (CARD8	op,
+-			     PicturePtr pSrc,
+-			     PicturePtr pMask,
+-			     PicturePtr pDst,
+-			     INT16      xSrc,
+-			     INT16      ySrc,
+-			     INT16      xMask,
+-			     INT16      yMask,
+-			     INT16      xDst,
+-			     INT16      yDst,
+-			     CARD16     width,
+-			     CARD16     height);
++fbCompositeSrcAdd_1000x1000 (FbComposeData *params);
+ 
+ void
+-fbCompositeSolidMask_nx1xn (CARD8      op,
+-			    PicturePtr pSrc,
+-			    PicturePtr pMask,
+-			    PicturePtr pDst,
+-			    INT16      xSrc,
+-			    INT16      ySrc,
+-			    INT16      xMask,
+-			    INT16      yMask,
+-			    INT16      xDst,
+-			    INT16      yDst,
+-			    CARD16     width,
+-			    CARD16     height);
++fbCompositeSolidMask_nx1xn (FbComposeData *params);
+ 
+ void
+-fbComposite (int      op,
++fbComposite (CARD8      op,
+ 	     PicturePtr pSrc,
+ 	     PicturePtr pMask,
+ 	     PicturePtr pDst,
+-	     int      xSrc,
+-	     int      ySrc,
+-	     int      xMask,
+-	     int      yMask,
+-	     int      xDst,
+-	     int      yDst,
+-	     int     width,
+-	     int     height);
++	     INT16      xSrc,
++	     INT16      ySrc,
++	     INT16      xMask,
++	     INT16      yMask,
++	     INT16      xDst,
++	     INT16      yDst,
++	     CARD16     width,
++	     CARD16     height);
+ 
+ /* fbtrap.c */
+ 

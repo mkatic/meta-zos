@@ -1,0 +1,13 @@
+Index: awesome-3.4.11/awesomeConfig.cmake
+===================================================================
+--- awesome-3.4.11.orig/awesomeConfig.cmake	2012-03-15 00:43:08.000000000 +0100
++++ awesome-3.4.11/awesomeConfig.cmake	2012-03-15 00:43:29.000000000 +0100
+@@ -16,7 +16,7 @@
+ option(GENERATE_LUADOC "generate luadoc" ON)
+ 
+ # {{{ CFLAGS
+-add_definitions(-std=gnu99 -ggdb3 -fno-strict-aliasing -Wall -Wextra
++add_definitions(-std=gnu99 -fno-strict-aliasing -Wall -Wextra
+     -Wchar-subscripts -Wundef -Wshadow -Wcast-align -Wwrite-strings
+     -Wsign-compare -Wunused -Wno-unused-parameter -Wuninitialized -Winit-self
+     -Wpointer-arith -Wredundant-decls -Wformat-nonliteral

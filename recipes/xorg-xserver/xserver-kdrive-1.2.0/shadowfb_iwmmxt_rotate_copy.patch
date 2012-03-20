@@ -1,0 +1,245 @@
+diff --git a/miext/shadow/Makefile.am b/miext/shadow/Makefile.am
+index a73d0ec..03873e4 100644
+--- a/miext/shadow/Makefile.am
++++ b/miext/shadow/Makefile.am
+@@ -31,4 +31,5 @@ libshadow_la_SOURCES =		\
+ 	shrot8pack.c		\
+ 	shrotate.c		\
+ 	shrotpack.h		\
+-	shrotpackYX.h
++	shrotpackYX.h \
++	iwmmxt_rotate_copy.s
+diff --git a/miext/shadow/iwmmxt_rotate_copy.s b/miext/shadow/iwmmxt_rotate_copy.s
+new file mode 100644
+index 0000000..4c730c4
+--- /dev/null
++++ b/miext/shadow/iwmmxt_rotate_copy.s
+@@ -0,0 +1,98 @@
++@ r0 - src
++@ r1 - dest
++@ r2 - width	@ must be a multiple of 4
++
++	.code 32
++	.text
++	.equ src_stride, 1280
++	.equ dst_stride, 960
++	.global iwmmxt_rotate_copy
++	
++iwmmxt_rotate_copy:
++	stmfd   sp!,{r4-r8,lr}
++	mov r6, #16	@ used for 2 pixel rotation
++	mov r7, #32	@ used for 4 pixel rotation
++	mov r4, r0	@ save src
++	mov r5, r1  @ save dst
++	mov r8, r2	@ save width
++	tmcr wcgr0, r6
++	tmcr wcgr1, r7
++iwmmxt_rotate_copy_main_loop:
++	wldrd wr0,[r0]
++	add r0, r0, #src_stride
++	wldrd wr1,[r0]
++	add r0, r0, #src_stride
++	wldrd wr2,[r0]
++	add r0, r0, #src_stride
++	wldrd wr3,[r0]
++	add r0, r0, #src_stride
++
++	wldrd wr8,[r0]
++	add r0, r0, #src_stride
++	wunpckihh wr4, wr0, wr1
++	wunpckihh wr5, wr2, wr3
++	wldrd wr9,[r0]
++	add r0, r0, #src_stride
++	wunpckilh wr6, wr0, wr1
++	wunpckilh wr7, wr2, wr3
++	wldrd wr10,[r0]
++	add r0, r0, #src_stride
++	wunpckihw wr0, wr4, wr5
++	wunpckilw wr1, wr4, wr5
++	wldrd wr11,[r0]
++	add r0, r0, #src_stride
++	wunpckihw wr2, wr6, wr7
++	wunpckilw wr3, wr6, wr7
++	
++	wunpckihh wr12, wr8, wr9
++	wunpckihh wr13, wr10, wr11
++	wunpckilh wr14, wr8, wr9
++	wunpckilh wr15, wr10, wr11
++	wunpckihw wr8, wr12, wr13
++	wunpckilw wr9, wr12, wr13
++	wunpckihw wr10, wr14, wr15
++	wunpckilw wr11, wr14, wr15
++
++	/* rotate and copy to screen */
++	wrorwg wr11, wr11, wcgr0
++	wrordg wr11, wr11, wcgr1
++	wstrd wr11,[r1]
++	wrorwg wr3, wr3, wcgr0
++	wrordg wr3, wr3, wcgr1
++	wstrd wr3,[r1, #8]
++	add r1, r1, #dst_stride
++
++	wrorwg wr10, wr10, wcgr0
++	wrordg wr10, wr10, wcgr1
++	wstrd wr10,[r1]
++	wrorwg wr2, wr2, wcgr0
++	wrordg wr2, wr2, wcgr1
++	wstrd wr2,[r1, #8]
++	add r1, r1, #dst_stride
++
++	wrorwg wr9, wr9, wcgr0
++	wrordg wr9, wr9, wcgr1
++	wstrd wr9,[r1]
++	wrorwg wr1, wr1, wcgr0
++	wrordg wr1, wr1, wcgr1
++	wstrd wr1,[r1, #8]
++	add r1, r1, #dst_stride
++
++	wrorwg wr8, wr8, wcgr0
++	wrordg wr8, wr8, wcgr1
++	wstrd wr8,[r1]
++	wrorwg wr0, wr0, wcgr0
++	wrordg wr0, wr0, wcgr1
++	wstrd wr0,[r1, #8]
++	add r1, r1, #dst_stride
++
++	subs r2, r2, #4 @ decrement width
++	beq exit
++	bmi exit
++	add r4, r4, #8	@ update shaBase
++	mov r0, r4
++	b iwmmxt_rotate_copy_main_loop
++
++exit:
++	ldmfd   sp!,{r4-r8,pc}
++	.end
+diff --git a/miext/shadow/shrot16pack_270YX.c b/miext/shadow/shrot16pack_270YX.c
+index 3a3dfa8..20896f1 100644
+--- a/miext/shadow/shrot16pack_270YX.c
++++ b/miext/shadow/shrot16pack_270YX.c
+@@ -30,4 +30,4 @@
+ #include <dix-config.h>
+ #endif
+ 
+-#include "shrotpackYX.h"
++#include "shrotpackYX_270.h"
+diff --git a/miext/shadow/shrotpackYX_270.h b/miext/shadow/shrotpackYX_270.h
+new file mode 100644
+index 0000000..4cb825c
+--- /dev/null
++++ b/miext/shadow/shrotpackYX_270.h
+@@ -0,0 +1,114 @@
++/*
++ * $Id$
++ *
++ * Copyright © 2004 Philip Blundell
++ *
++ * Permission to use, copy, modify, distribute, and sell this software and its
++ * documentation for any purpose is hereby granted without fee, provided that
++ * the above copyright notice appear in all copies and that both that
++ * copyright notice and this permission notice appear in supporting
++ * documentation, and that the name of Philip Blundell not be used in
++ * advertising or publicity pertaining to distribution of the software without
++ * specific, written prior permission.  Philip Blundell makes no
++ * representations about the suitability of this software for any purpose.  It
++ * is provided "as is" without express or implied warranty.
++ *
++ * PHILIP BLUNDELL DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
++ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO
++ * EVENT SHALL PHILIP BLUNDELL BE LIABLE FOR ANY SPECIAL, INDIRECT OR
++ * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
++ * DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
++ * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
++ * PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include    <X11/X.h>
++#include    "scrnintstr.h"
++#include    "windowstr.h"
++#include    "dixfontstr.h"
++#include    "mi.h"
++#include    "regionstr.h"
++#include    "globals.h"
++#include    "gcstruct.h"
++#include    "shadow.h"
++#include    "fb.h"
++
++#define BLOCK_SIZE 8
++#define WINSTEPX(stride)    (stride)
++#define WINSTART(x,y)       (((pScreen->height - BLOCK_SIZE) - y) + (x * winStride))
++#define WINSTEPY()	    -1
++
++void static inline iwmmxt_rotate_copy (void *src, void *dst, int width);
++
++void
++FUNC (ScreenPtr	    pScreen,
++      shadowBufPtr  pBuf);
++
++void FUNC (ScreenPtr	    pScreen,
++      shadowBufPtr  pBuf) {
++
++	RegionPtr damage = shadowDamage(pBuf);
++	PixmapPtr pShadow = pBuf->pPixmap;
++	int nbox = REGION_NUM_RECTS(damage);
++	BoxPtr pbox = REGION_RECTS(damage);
++	CARD32 winSize;
++	FbBits *shaBits;
++	Data *shaBase, *shaLine, *sha;
++	FbStride shaStride, winStride;
++	int shaBpp;
++	int shaXoff, shaYoff; /* XXX assumed to be zero */
++	int x, y, w, h, prologue_h, prologue_w;
++	Data *winBase, *win, *winLine;
++
++	fbGetDrawable(&pShadow->drawable, shaBits, shaStride, shaBpp, shaXoff,
++			shaYoff);
++	shaBase = (Data *) shaBits;
++	shaStride = shaStride * sizeof(FbBits) / sizeof(Data);
++
++	winBase = (Data *) (*pBuf->window)(pScreen, 0, 0, SHADOW_WINDOW_WRITE,
++			&winSize, pBuf->closure);
++	winStride = (Data *) (*pBuf->window)(pScreen, 1, 0, SHADOW_WINDOW_WRITE,
++			&winSize, pBuf->closure) - winBase;
++
++
++
++/* rotate and copy 4x8 blocks of pixels.
++ *
++ * Instead of trying to deal with alignment issues
++ * with shaLine and winLine (both need to be 64 bit aligned),
++ * expand the dirty rect (pbox) to proper alignment. This
++ * incurrs a slight overhead. Better than
++ * dealing with alignment issues. :)
++ */
++
++    while (nbox--) {
++
++    	while (pbox->x1 & (7 << 0))
++    			pbox->x1--;
++    	while (pbox->x2 & (7 << 0))
++    			pbox->x2++;
++
++    	while (pbox->y1 & (7 << 0))
++    			pbox->y1--;
++    	while (pbox->y2 & (7 << 0))
++    				pbox->y2++;
++
++        x = pbox->x1;
++        y = pbox->y1;
++        w = (pbox->x2 - pbox->x1);
++        h = pbox->y2 - pbox->y1;
++
++    	shaLine = shaBase + (y * shaStride) + x;
++    	winLine = winBase + WINSTART(x, y);
++
++		do {
++			sha = shaLine;
++			win = winLine;
++			iwmmxt_rotate_copy(sha, win, w);
++			shaLine += (shaStride * BLOCK_SIZE);
++			winLine -= BLOCK_SIZE;
++			h -= BLOCK_SIZE;
++		} while (h > 0);
++       pbox++;
++    } /*  nbox */
++}

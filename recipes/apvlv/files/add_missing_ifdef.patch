@@ -1,0 +1,16 @@
+Index: git/src/ApvlvView.cc
+===================================================================
+--- git.orig/src/ApvlvView.cc	2012-03-14 19:44:59.000000000 +0100
++++ git/src/ApvlvView.cc	2012-03-14 19:45:27.000000000 +0100
+@@ -29,7 +29,11 @@
+ #include "ApvlvParams.h"
+ #include "ApvlvInfo.h"
+ #include "ApvlvDir.h"
++
++#ifdef APVLV_WITH_HTML
+ #include "ApvlvHtm.h"
++#endif
++
+ #include "ApvlvCmds.h"
+ #include "ApvlvView.h"
+ 

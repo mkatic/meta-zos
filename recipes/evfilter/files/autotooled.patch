@@ -1,0 +1,625 @@
+diff --git a/Makefile b/Makefile
+deleted file mode 100644
+index 554cdb8..0000000
+--- a/Makefile
++++ /dev/null
+@@ -1,25 +0,0 @@
+-#
+-# Global Makefile
+-#
+-
+-# 
+-# make all binaries
+-#
+-all:
+-	make -C src
+-
+-#
+-# clean 
+-#
+-clean:
+-	make -C src clean
+-
+-#
+-# install
+-#
+-install:
+-	make -C src install
+-
+-tar:
+-	make clean
+-	cd .. && tar czf libevfilter.tgz libevfilter/
+diff --git a/Makefile.in b/Makefile.in
+new file mode 100644
+index 0000000..7731216
+--- /dev/null
++++ b/Makefile.in
+@@ -0,0 +1,34 @@
++#
++# Global Makefile
++#
++prefix=@prefix@
++exec_prefix=@exec_prefix@
++libdir=${DESTDIR}@libdir@
++# 
++# make all binaries
++#
++all:
++	make -C src
++
++#
++# clean 
++#
++clean:
++	make -C src clean
++
++distclean:
++	-rm -r autom4te.cache
++	-rm  configure config.status Makefile config.h config.log evfilter.pc
++	make -C src distclean
++#
++# install
++#
++install:
++	-install -d ${libdir}/pkgconfig
++	install evfilter.pc ${libdir}/pkgconfig/
++	make -C src install
++
++tar:
++	make clean
++	rm -r autom4te.cache
++	cd .. && tar czf libevfilter.tgz libevfilter/
+diff --git a/config.h.in b/config.h.in
+new file mode 100644
+index 0000000..f9ea500
+--- /dev/null
++++ b/config.h.in
+@@ -0,0 +1,121 @@
++/* config.h.in.  Generated from configure.ac by autoheader.  */
++
++/* Define to 1 if you have the <fcntl.h> header file. */
++#undef HAVE_FCNTL_H
++
++/* Define to 1 if you have the `gettimeofday' function. */
++#undef HAVE_GETTIMEOFDAY
++
++/* Define to 1 if you have the <inttypes.h> header file. */
++#undef HAVE_INTTYPES_H
++
++/* Define to 1 if you have the <limits.h> header file. */
++#undef HAVE_LIMITS_H
++
++/* Define to 1 if your system has a GNU libc compatible `malloc' function, and
++   to 0 otherwise. */
++#undef HAVE_MALLOC
++
++/* Define to 1 if you have the <memory.h> header file. */
++#undef HAVE_MEMORY_H
++
++/* Define to 1 if you have the `memset' function. */
++#undef HAVE_MEMSET
++
++/* Define to 1 if you have the `select' function. */
++#undef HAVE_SELECT
++
++/* Define to 1 if stdbool.h conforms to C99. */
++#undef HAVE_STDBOOL_H
++
++/* Define to 1 if you have the <stdint.h> header file. */
++#undef HAVE_STDINT_H
++
++/* Define to 1 if you have the <stdlib.h> header file. */
++#undef HAVE_STDLIB_H
++
++/* Define to 1 if you have the `strcasecmp' function. */
++#undef HAVE_STRCASECMP
++
++/* Define to 1 if you have the `strerror' function. */
++#undef HAVE_STRERROR
++
++/* Define to 1 if you have the <strings.h> header file. */
++#undef HAVE_STRINGS_H
++
++/* Define to 1 if you have the <string.h> header file. */
++#undef HAVE_STRING_H
++
++/* Define to 1 if you have the `strncasecmp' function. */
++#undef HAVE_STRNCASECMP
++
++/* Define to 1 if you have the `strtol' function. */
++#undef HAVE_STRTOL
++
++/* Define to 1 if `st_rdev' is a member of `struct stat'. */
++#undef HAVE_STRUCT_STAT_ST_RDEV
++
++/* Define to 1 if you have the <syslog.h> header file. */
++#undef HAVE_SYSLOG_H
++
++/* Define to 1 if you have the <sys/ioctl.h> header file. */
++#undef HAVE_SYS_IOCTL_H
++
++/* Define to 1 if you have the <sys/stat.h> header file. */
++#undef HAVE_SYS_STAT_H
++
++/* Define to 1 if you have the <sys/types.h> header file. */
++#undef HAVE_SYS_TYPES_H
++
++/* Define to 1 if you have the <unistd.h> header file. */
++#undef HAVE_UNISTD_H
++
++/* Define to 1 if the system has the type `_Bool'. */
++#undef HAVE__BOOL
++
++/* Define to 1 if `major', `minor', and `makedev' are declared in <mkdev.h>.
++   */
++#undef MAJOR_IN_MKDEV
++
++/* Define to 1 if `major', `minor', and `makedev' are declared in
++   <sysmacros.h>. */
++#undef MAJOR_IN_SYSMACROS
++
++/* Define to the address where bug reports for this package should be sent. */
++#undef PACKAGE_BUGREPORT
++
++/* Define to the full name of this package. */
++#undef PACKAGE_NAME
++
++/* Define to the full name and version of this package. */
++#undef PACKAGE_STRING
++
++/* Define to the one symbol short name of this package. */
++#undef PACKAGE_TARNAME
++
++/* Define to the home page for this package. */
++#undef PACKAGE_URL
++
++/* Define to the version of this package. */
++#undef PACKAGE_VERSION
++
++/* Define to 1 if you have the ANSI C header files. */
++#undef STDC_HEADERS
++
++/* Define for Solaris 2.5.1 so the uint32_t typedef from <sys/synch.h>,
++   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
++   #define below would cause a syntax error. */
++#undef _UINT32_T
++
++/* Define to rpl_malloc if the replacement function should be used. */
++#undef malloc
++
++/* Define to `int' if <sys/types.h> does not define. */
++#undef pid_t
++
++/* Define to `unsigned int' if <sys/types.h> does not define. */
++#undef size_t
++
++/* Define to the type of an unsigned integer type of width exactly 32 bits if
++   such a type exists and the standard includes do not define it. */
++#undef uint32_t
+diff --git a/configure.ac b/configure.ac
+new file mode 100644
+index 0000000..5c013c0
+--- /dev/null
++++ b/configure.ac
+@@ -0,0 +1,41 @@
++#                                               -*- Autoconf -*-
++# Process this file with autoconf to produce a configure script.
++
++AC_PREREQ([2.67])
++AC_INIT([evfilter], [0.1])
++AC_CONFIG_SRCDIR([src/evf_err.h])
++AC_CONFIG_HEADERS([config.h])
++
++# Checks for programs.
++AC_PROG_CC
++AC_PROG_INSTALL
++AC_PROG_LN_S
++AC_PROG_MAKE_SET
++
++# Checks for libraries.
++# FIXME: Replace `main' with a function in `-lSDL_gfx':
++#AC_CHECK_LIB([SDL_gfx], [main])
++
++# Checks for header files.
++AC_CHECK_HEADERS([fcntl.h limits.h stdint.h stdlib.h string.h strings.h sys/ioctl.h syslog.h unistd.h])
++
++# Checks for typedefs, structures, and compiler characteristics.
++AC_HEADER_STDBOOL
++AC_TYPE_PID_T
++AC_TYPE_SIZE_T
++AC_CHECK_MEMBERS([struct stat.st_rdev])
++AC_TYPE_UINT32_T
++
++# Checks for library functions.
++AC_HEADER_MAJOR
++AC_FUNC_MALLOC
++AC_CHECK_FUNCS([gettimeofday memset select strcasecmp strerror strncasecmp strtol])
++
++AC_CONFIG_FILES([Makefile
++                 src/Makefile
++                 src/evfd/Makefile
++                 src/filters/Makefile
++                 src/keyparser/Makefile
++                 src/tests/Makefile
++		 evfilter.pc])
++AC_OUTPUT
+diff --git a/evfilter.pc.in b/evfilter.pc.in
+new file mode 100644
+index 0000000..906b878
+--- /dev/null
++++ b/evfilter.pc.in
+@@ -0,0 +1,11 @@
++prefix=@prefix@
++exec_prefix=${prefix}
++includedir=@includedir@
++libdir=@libdir@
++
++Name: evfilter
++Description: Evfilter is userspace library for filtering/modifying input events.
++Requires: 
++Version: @PACKAGE_VERSION@
++Libs: -L${libdir} -levfilter
++Cflags: -I${includedir}/evfilter
+diff --git a/install-sh b/install-sh
+new file mode 100644
+index 0000000..acbc962
+--- /dev/null
++++ b/install-sh
+@@ -0,0 +1 @@
++fake
+diff --git a/src/Makefile b/src/Makefile
+deleted file mode 100644
+index 73f2585..0000000
+--- a/src/Makefile
++++ /dev/null
+@@ -1,48 +0,0 @@
+-# compilers and tools
+-CC=gcc
+-CFLAGS=-fPIC -Wall -W -ggdb -DDEBUG -Ikeyparser
+-
+-# source files
+-CSOURCES=evf_param.c evf_err.c evf_profile.c evf_filter.c     \
+-         evf_loader.c evf_line.c evf_input.c evf_io_queue.c   \
+-	 evf_hotplug.c evf_uinput.c evf_handle.c config.c
+-KEYPARSER_HEADERS=keyparser/key_parser.h keyparser/keys.h
+-HEADERS=$(shell ls ./*.h)
+-
+-# object files
+-OBJECTS=$(CSOURCES:.c=.o) 
+-
+-all: libevfilter.so
+-
+-make_keyparser:
+-	@cd keyparser && $(MAKE)
+-
+-make_filters:
+-	@cd filters && $(MAKE)
+-
+-libevfilter.so: make_filters make_keyparser $(OBJECTS) $(HEADERS) $(KEYPARSER_HEADERS)
+-	$(CC) --shared -Wl,-soname -Wl,libevfilter.so.0 $(OBJECTS) keyparser/*.o filters/*.o -o libevfilter.so
+-
+-
+-# rules for compiling c sources
+-.c.o:
+-	$(CC) $(CFLAGS) -c $< -o $@
+-
+-# install
+-INSTALL_HEADERS=evfilter.h evf_err.h evf_filter.h evf_hotplug.h     \
+-                evf_line.h evf_loader.h evf_param.h evf_profile.h   \
+-                evf_io_queue.h evf_struct.h evf_input.h evf_uinput.h
+-
+-install: libevfilter.so
+-	install libevfilter.so /usr/lib/
+-	if ! [ -e /usr/lib/libevfilter.so.0 ]; then \
+-	ln -s /usr/lib/libevfilter.so /usr/lib/libevfilter.so.0; \
+-	fi
+-	install -d /usr/include/evfilter/
+-	install -m 644 $(INSTALL_HEADERS) /usr/include/evfilter/ 
+-
+-# clean!
+-clean:
+-	rm -rf $(OBJECTS) libevfilter.so
+-	@cd keyparser && $(MAKE) clean
+-	@cd filters && $(MAKE) clean
+diff --git a/src/Makefile.in b/src/Makefile.in
+new file mode 100644
+index 0000000..5c6a6c3
+--- /dev/null
++++ b/src/Makefile.in
+@@ -0,0 +1,63 @@
++# compilers and tools
++CC=@CC@
++CFLAGS= -fPIC -Wall -W -ggdb -DDEBUG -Ikeyparser
++CFLAGS += @CFLAGS@
++
++prefix = @prefix@
++exec_prefix = ${prefix}
++libdir = ${DESTDIR}@libdir@
++includedir = ${DESTDIR}@includedir@
++
++# source files
++CSOURCES=evf_param.c evf_err.c evf_profile.c evf_filter.c     \
++         evf_loader.c evf_line.c evf_input.c evf_io_queue.c   \
++	 evf_hotplug.c evf_uinput.c evf_handle.c config.c
++KEYPARSER_HEADERS=keyparser/key_parser.h keyparser/keys.h
++HEADERS=$(shell ls ./*.h)
++
++# object files
++OBJECTS=$(CSOURCES:.c=.o) 
++
++all: libevfilter.so
++
++make_keyparser:
++	@cd keyparser && $(MAKE)
++
++make_filters:
++	@cd filters && $(MAKE)
++
++libevfilter.so: make_filters make_keyparser $(OBJECTS) $(HEADERS) $(KEYPARSER_HEADERS)
++	$(CC) --shared -Wl,-soname -Wl,libevfilter.so.0 $(OBJECTS) keyparser/*.o filters/*.o -o libevfilter.so
++
++
++# rules for compiling c sources
++.c.o:
++	$(CC) $(CFLAGS) -c $< -o $@
++
++# install
++INSTALL_HEADERS=evfilter.h evf_err.h evf_filter.h evf_hotplug.h     \
++                evf_line.h evf_loader.h evf_param.h evf_profile.h   \
++                evf_io_queue.h evf_struct.h evf_input.h evf_uinput.h
++
++install: libevfilter.so
++	install -d ${libdir}
++	-ln -s libevfilter.so libevfilter.so.0
++	install libevfilter.so ${libdir} 
++	install libevfilter.so.0 ${libdir} 
++	install -d ${includedir}/evfilter/
++	install -m 644 $(INSTALL_HEADERS) ${includedir}/evfilter/ 
++
++# clean!
++clean:
++	rm -rf $(OBJECTS) libevfilter.so
++	@cd keyparser && $(MAKE) clean
++	@cd filters && $(MAKE) clean
++	@cd evfd && $(MAKE) clean
++	@cd tests && $(MAKE) clean
++
++distclean: clean
++	rm Makefile
++	rm keyparser/Makefile
++	rm filters/Makefile
++	rm evfd/Makefile
++	rm tests/Makefile
+diff --git a/src/evfd/Makefile b/src/evfd/Makefile
+deleted file mode 100644
+index 0204982..0000000
+--- a/src/evfd/Makefile
++++ /dev/null
+@@ -1,27 +0,0 @@
+-# compilers and tools
+-CC=gcc
+-CFLAGS=-Wall -W -ggdb -I.. -L.. -levfilter
+-
+-BINARY=evfd
+-
+-$(BINARY): evfd.o evfd_msg.o evfd_lock.o
+-
+-all: $(BINARY)
+-
+-%: %.o
+-	$(CC) $(CFLAGS) $^ -o $@
+-
+-%: %.c
+-	$(CC) $(CFLAGS) $< -o $@
+-
+-install:
+-	install -m 775 $(BINARY) /usr/sbin/
+-
+-clean:
+-	rm -rf $(BINARY) *.o
+-	
+-evfd_lock.o: evfd_lock.c evfd_lock.h evfd_msg.h
+-evfd_msg.o: evfd_msg.c evfd_msg.h
+-evfd.o: evfd.c evfd_msg.h evfd_lock.h evfd.h
+-evfd_lock.o: evfd_lock.c evfd_lock.h evfd_msg.h
+-evfd_msg.o: evfd_msg.c evfd_msg.h
+diff --git a/src/evfd/Makefile.in b/src/evfd/Makefile.in
+new file mode 100644
+index 0000000..bfef399
+--- /dev/null
++++ b/src/evfd/Makefile.in
+@@ -0,0 +1,33 @@
++# compilers and tools
++CC=@CC@
++CFLAGS= -Wall -W -ggdb -I.. -L.. -levfilter
++CFLAGS += @CFLAGS@
++
++sbindir = ${DESTDIR}@sbindir@
++
++BINARY=evfd
++
++$(BINARY): evfd.o evfd_msg.o evfd_lock.o
++
++all: $(BINARY)
++
++%: %.o
++	$(CC) $(CFLAGS) $^ -o $@
++
++%: %.c
++	$(CC) $(CFLAGS) $< -o $@
++
++install:
++	install -m 775 $(BINARY) ${sbindir} 
++
++clean:
++	rm -rf $(BINARY) *.o
++
++distclean:
++	rm Makefile
++	
++evfd_lock.o: evfd_lock.c evfd_lock.h evfd_msg.h
++evfd_msg.o: evfd_msg.c evfd_msg.h
++evfd.o: evfd.c evfd_msg.h evfd_lock.h evfd.h
++evfd_lock.o: evfd_lock.c evfd_lock.h evfd_msg.h
++evfd_msg.o: evfd_msg.c evfd_msg.h
+diff --git a/src/filters/Makefile b/src/filters/Makefile
+deleted file mode 100644
+index ac8de12..0000000
+--- a/src/filters/Makefile
++++ /dev/null
+@@ -1,22 +0,0 @@
+-# compilers and tools
+-CC=gcc
+-CFLAGS=-fPIC -Wall -W -ggdb -DDEBUG -I.. -I../keyparser
+-
+-# source files
+-CSOURCES=commit.c dump.c no_repeat.c pressure_to_key.c speed_mod_rel.c  \
+-         barrier.c weighted_average_abs.c scale_abs.c mirror.c rotate.c \
+-	 abs2rel.c btn2rel.c kalman.c rel2scroll.c copy_to_handle.c     \
+-	 get_from_handle.c key_lock.c filter_to_handle.c key_substitute.c
+-
+-# object files
+-OBJECTS=$(CSOURCES:.c=.o) 
+-
+-all: $(OBJECTS)
+-
+-# rules for compiling c sources
+-.c.o:
+-	$(CC) $(CFLAGS) -c $< -o $@
+-
+-# clean!
+-clean:
+-	rm -rf $(OBJECTS)
+diff --git a/src/filters/Makefile.in b/src/filters/Makefile.in
+new file mode 100644
+index 0000000..17ceb11
+--- /dev/null
++++ b/src/filters/Makefile.in
+@@ -0,0 +1,26 @@
++# compilers and tools
++CC=@CC@
++CFLAGS= -fPIC -Wall -W -ggdb -DDEBUG -I.. -I../keyparser
++CFLAGS += @CFLAGS@
++
++# source files
++CSOURCES=commit.c dump.c no_repeat.c pressure_to_key.c speed_mod_rel.c  \
++         barrier.c weighted_average_abs.c scale_abs.c mirror.c rotate.c \
++	 abs2rel.c btn2rel.c kalman.c rel2scroll.c copy_to_handle.c     \
++	 get_from_handle.c key_lock.c filter_to_handle.c key_substitute.c
++
++# object files
++OBJECTS=$(CSOURCES:.c=.o) 
++
++all: $(OBJECTS)
++
++# rules for compiling c sources
++.c.o:
++	$(CC) $(CFLAGS) -c $< -o $@
++
++# clean!
++clean:
++	rm -rf $(OBJECTS)
++
++distclean: clean
++	rm Makefile
+diff --git a/src/keyparser/Makefile b/src/keyparser/Makefile
+deleted file mode 100644
+index 0bf0de5..0000000
+--- a/src/keyparser/Makefile
++++ /dev/null
+@@ -1,30 +0,0 @@
+-# compilers and tools
+-CC=gcc
+-CCFLAGS=-fPIC -Wall -W -ggdb -O -DDEBUG
+-
+-# source files
+-CSOURCES=evf_getkey.c key_parser.c
+-HEADERS=$(shell ls ./*.h)
+-
+-# object files
+-OBJECTS=$(CSOURCES:.c=.o) 
+-
+-all: evf-getkey
+-
+-evf-getkey: key_parser.o evf_getkey.o
+-	$(CC) key_parser.o evf_getkey.o -o evf-getkey
+-
+-keys.h: keyparser.in do_parser.sh
+-	./do_parser.sh > keys.h
+-
+-# rulez for compiling c sources
+-.c.o:
+-	$(CC) $(CCFLAGS) -c $< -o $@
+-
+-# clean!
+-clean:
+-	rm -rf $(OBJECTS) evf-getkey
+-
+-# dependencies
+-evf_getkey.o: evf_getkey.c key_parser.h
+-key_parser.o: key_parser.c key_parser.h keys.h
+diff --git a/src/keyparser/Makefile.in b/src/keyparser/Makefile.in
+new file mode 100644
+index 0000000..6adf0e3
+--- /dev/null
++++ b/src/keyparser/Makefile.in
+@@ -0,0 +1,29 @@
++# compilers and tools
++CC=@CC@
++CFLAGS= -fPIC -Wall -W -ggdb -O -DDEBUG
++CFLAGS += @CFLAGS@
++
++# source files
++CSOURCES=evf_getkey.c key_parser.c
++HEADERS=$(shell ls ./*.h)
++
++# object files
++OBJECTS=$(CSOURCES:.c=.o) 
++
++all: evf-getkey
++
++evf-getkey: $(OBJECTS)
++
++keys.h: keyparser.in do_parser.sh
++	./do_parser.sh > keys.h
++
++# rule for compiling c sources
++%.o:%.c
++	$(CC) $(CFLAGS) -c $^ -o $@
++
++# clean!
++clean:
++	rm -rf $(OBJECTS) evf-getkey
++
++distclean: clean
++	rm Makefile
+	
+diff --git a/src/tests/Makefile.in b/src/tests/Makefile.in
+new file mode 100644
+index 0000000..8d1b3e0
+--- /dev/null
++++ b/src/tests/Makefile.in
+@@ -0,0 +1,23 @@
++# compilers and tools
++CC=@CC@
++CFLAGS= -Wall -W -ggdb -I.. -L.. -levfilter
++CFLAGS += @CFLAGS@
++
++BINARIES=param_loader load_all input_line draw io_queue hotplug hotplug pointer_test uinput
++
++all: $(BINARIES)
++
++draw: draw.c sdl_utils.c sdl_utils.h
++	$(CC) $(CFLAGS) `sdl-config --static-libs --cflags` -lSDL_gfx draw.c sdl_utils.c -o draw
++	
++pointer_test: pointer_test.c
++	$(CC) $(CFLAGS) `sdl-config --static-libs --cflags` -lSDL_gfx pointer_test.c -o pointer_test
++
++%: %.c
++	$(CC) $(CFLAGS) $< -o $@
++
++clean:
++	rm -rf $(BINARIES)
++
++distclean: clean
++	rm Makefile	

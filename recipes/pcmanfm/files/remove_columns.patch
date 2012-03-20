@@ -1,0 +1,121 @@
+Index: pcmanfm-mod-1.2.3/src/ptk/ptk-file-browser.c
+===================================================================
+--- pcmanfm-mod-1.2.3.orig/src/ptk/ptk-file-browser.c	2012-03-15 13:45:54.000000000 +0100
++++ pcmanfm-mod-1.2.3/src/ptk/ptk-file-browser.c	2012-03-15 13:41:45.000000000 +0100
+@@ -859,18 +859,9 @@
+     case COL_FILE_SIZE:
+         col = PTK_FB_SORT_BY_SIZE;
+         break;
+-    case COL_FILE_MTIME:
+-        col = PTK_FB_SORT_BY_MTIME;
+-        break;
+     case COL_FILE_DESC:
+         col = PTK_FB_SORT_BY_TYPE;
+         break;
+-    case COL_FILE_PERM:
+-        col = PTK_FB_SORT_BY_PERM;
+-        break;
+-    case COL_FILE_OWNER:
+-        col = PTK_FB_SORT_BY_OWNER;
+-        break;
+     }
+     file_browser->sort_order = col;
+     //MOD enable following to make column click permanent sort
+@@ -1842,14 +1833,12 @@
+     GtkCellRenderer *renderer;
+     GtkCellRenderer *pix_renderer;
+ 
+-    int cols[] = { COL_FILE_NAME, COL_FILE_SIZE, COL_FILE_DESC,
+-                   COL_FILE_PERM, COL_FILE_OWNER, COL_FILE_MTIME };
++    int cols[] = { COL_FILE_NAME, COL_FILE_SIZE, COL_FILE_DESC};
+     int i;
+ 
+     const char* titles[] =
+         {
+-            N_( "Name" ), N_( "Size" ), N_( "Type" ),
+-            N_( "Permission" ), N_( "Owner:Group" ), N_( "Last Modification" )
++            N_( "Name" ), N_( "Size" ), N_( "Type" )
+         };
+ 
+     for ( i = 0; i < G_N_ELEMENTS( cols ); ++i )
+@@ -3136,18 +3125,9 @@
+     case PTK_FB_SORT_BY_SIZE:
+         col = COL_FILE_SIZE;
+         break;
+-    case PTK_FB_SORT_BY_MTIME:
+-        col = COL_FILE_MTIME;
+-        break;
+     case PTK_FB_SORT_BY_TYPE:
+         col = COL_FILE_DESC;
+         break;
+-    case PTK_FB_SORT_BY_PERM:
+-        col = COL_FILE_PERM;
+-        break;
+-    case PTK_FB_SORT_BY_OWNER:
+-        col = COL_FILE_OWNER;
+-        break;
+     default:
+         col = COL_FILE_NAME;
+     }
+Index: pcmanfm-mod-1.2.3/src/ptk/ptk-file-list.c
+===================================================================
+--- pcmanfm-mod-1.2.3.orig/src/ptk/ptk-file-list.c	2012-03-15 13:45:54.000000000 +0100
++++ pcmanfm-mod-1.2.3/src/ptk/ptk-file-list.c	2012-03-15 13:38:15.000000000 +0100
+@@ -212,9 +212,6 @@
+     column_types [ COL_FILE_DESC ] = G_TYPE_STRING;
+     column_types [ COL_FILE_SIZE ] = G_TYPE_STRING;
+     column_types [ COL_FILE_DESC ] = G_TYPE_STRING;
+-    column_types [ COL_FILE_PERM ] = G_TYPE_STRING;
+-    column_types [ COL_FILE_OWNER ] = G_TYPE_STRING;
+-    column_types [ COL_FILE_MTIME ] = G_TYPE_STRING;
+     column_types [ COL_FILE_INFO ] = G_TYPE_POINTER;
+ }
+ 
+@@ -478,15 +475,6 @@
+     case COL_FILE_DESC:
+         g_value_set_string( value, vfs_file_info_get_mime_type_desc( info ) );
+         break;
+-    case COL_FILE_PERM:
+-        g_value_set_string( value, vfs_file_info_get_disp_perm(info) );
+-        break;
+-    case COL_FILE_OWNER:
+-        g_value_set_string( value, vfs_file_info_get_disp_owner(info) );
+-        break;
+-    case COL_FILE_MTIME:
+-        g_value_set_string( value, vfs_file_info_get_disp_mtime(info) );
+-        break;
+     case COL_FILE_INFO:
+         g_value_set_pointer( value, vfs_file_info_ref( info ) );
+         break;
+@@ -668,17 +656,6 @@
+         ret = g_ascii_strcasecmp( vfs_file_info_get_mime_type_desc(file1),
+                                   vfs_file_info_get_mime_type_desc(file2) );
+         break;
+-    case COL_FILE_PERM:
+-        ret = g_ascii_strcasecmp( vfs_file_info_get_disp_perm(file1),
+-                                  vfs_file_info_get_disp_perm(file2) );
+-        break;
+-    case COL_FILE_OWNER:
+-        ret = g_ascii_strcasecmp( vfs_file_info_get_disp_owner(file1),
+-                                  vfs_file_info_get_disp_owner(file2) );
+-        break;
+-    case COL_FILE_MTIME:
+-        ret = file1->mtime - file2->mtime;
+-        break;
+     }
+     return list->sort_order == GTK_SORT_ASCENDING ? ret : -ret;
+ }
+Index: pcmanfm-mod-1.2.3/src/ptk/ptk-file-list.h
+===================================================================
+--- pcmanfm-mod-1.2.3.orig/src/ptk/ptk-file-list.h	2012-03-15 13:45:54.000000000 +0100
++++ pcmanfm-mod-1.2.3/src/ptk/ptk-file-list.h	2012-03-15 13:38:17.000000000 +0100
+@@ -37,9 +37,6 @@
+   COL_FILE_NAME,
+   COL_FILE_SIZE,
+   COL_FILE_DESC,
+-  COL_FILE_PERM,
+-  COL_FILE_OWNER,
+-  COL_FILE_MTIME,
+   COL_FILE_INFO,
+   N_FILE_LIST_COLS
+ };

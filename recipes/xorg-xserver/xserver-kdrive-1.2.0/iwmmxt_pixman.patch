@@ -1,0 +1,263 @@
+diff --git a/fb/Makefile.am b/fb/Makefile.am
+index 11b2d2f..aeca462 100644
+--- a/fb/Makefile.am
++++ b/fb/Makefile.am
+@@ -68,7 +68,10 @@ libfb_la_SOURCES = 	\
+ 	fbpseudocolor.c \
+ 	fbpseudocolor.h \
+ 	fbedge.c	\
+-	fbedgeimp.h
++	fbedgeimp.h \
++	iwmmxt.h
++	
++	
+ 
+ libfb_la_LIBADD = libfbmmx.la
+ 
+diff --git a/fb/fbpict.c b/fb/fbpict.c
+index 6116690..711ef80 100644
+--- a/fb/fbpict.c
++++ b/fb/fbpict.c
+@@ -29,7 +29,7 @@
+ #include <string.h>
+ 
+ #include "fb.h"
+-
++#include "iwmmxt.h"
+ #ifdef RENDER
+ 
+ #include "picturestr.h"
+@@ -755,37 +755,79 @@ fbCompositeSrcAdd_8000x8000 (CARD8	op,
+ 			     CARD16     height)
+ {
+     CARD8	*dstLine, *dst;
+-    CARD8	*srcLine, *src;
+-    FbStride	dstStride, srcStride;
++    CARD8	*maskLine, *mask;
++    FbStride	dstStride, maskStride;
+     CARD16	w;
+-    CARD8	s, d;
+-    CARD16	t;
++    CARD8	s, d, sa;
++    CARD32 srca;
++    __m64 vsrc, vsrca;
++
++    fbComposeGetSolid(pSrc, srca, pDst->format);
++    sa = srca >> 24;
+ 
+-    fbComposeGetStart (pSrc, xSrc, ySrc, CARD8, srcStride, srcLine, 1);
++    if (srca == 0)
++	return;
++
++    fbComposeGetStart (pSrc, xSrc, ySrc, CARD8, maskStride, maskLine, 1);
+     fbComposeGetStart (pDst, xDst, yDst, CARD8, dstStride, dstLine, 1);
+ 
++    vsrc = load8888 (srca);
++    vsrca = expand_alpha (vsrc);
++
+     while (height--)
+     {
+ 	dst = dstLine;
+ 	dstLine += dstStride;
+-	src = srcLine;
+-	srcLine += srcStride;
++	mask = maskLine;
++	maskLine += maskStride;
+ 	w = width;
+ 
++	while (w && (unsigned long)dst & 3)
++	{
++	    uint16_t tmp;
++	    uint16_t a;
++	    uint32_t m, d;
++	    uint32_t r;
++
++	    a = *mask++;
++	    d = *dst;
++
++	    m = MUL_UN8 (sa, a, tmp);
++	    r = ADD_UN8 (m, d, tmp);
++
++	    *dst++ = r;
++	    w--;
++	}
++
++	while (w >= 4)
++	{
++	    __m64 vmask;
++	    __m64 vdest;
++
++	    vmask = load8888 (ldl_u((uint32_t *)mask));
++	    vdest = load8888 (*(uint32_t *)dst);
++
++	    *(uint32_t *)dst = store8888 (_mm_adds_pu8 (in (vsrca, vmask), vdest));
++
++	    dst += 4;
++	    mask += 4;
++	    w -= 4;
++	}
++
+ 	while (w--)
+ 	{
+-	    s = *src++;
+-	    if (s)
+-	    {
+-		if (s != 0xff)
+-		{
+-		    d = *dst;
+-		    t = d + s;
+-		    s = t | (0 - (t >> 8));
+-		}
+-		*dst = s;
+-	    }
+-	    dst++;
++	    uint16_t tmp;
++	    uint16_t a;
++	    uint32_t m, d;
++	    uint32_t r;
++
++	    a = *mask++;
++	    d = *dst;
++
++	    m = MUL_UN8 (sa, a, tmp);
++	    r = ADD_UN8 (m, d, tmp);
++
++	    *dst++ = r;
+ 	}
+     }
+ }
+diff --git a/fb/iwmmxt.h b/fb/iwmmxt.h
+new file mode 100644
+index 0000000..4e729a1
+--- /dev/null
++++ b/fb/iwmmxt.h
+@@ -0,0 +1,129 @@
++/*
++ * iwmmxt.h
++ *
++ * Created on: Feb 10, 2012
++ *
++ * Author: Marko Katić dromede@gmail.com
++ *
++ */
++
++#ifndef IWMMXT_H_
++#define IWMMXT_H_
++
++#include <mmintrin.h>
++#include <stdint.h>
++
++#define inline __inline__
++#define force_inline __inline__ __attribute__ ((__always_inline__))
++#define noinline __attribute__((noinline))
++#define MC(x) ((__m64) 0x0080008000800080ULL)
++
++#define COMPONENT_SIZE 8
++#define MASK 0xff
++#define ONE_HALF 0x80
++
++#define A_SHIFT 8 * 3
++#define R_SHIFT 8 * 2
++#define G_SHIFT 8
++#define A_MASK 0xff000000
++#define R_MASK 0xff0000
++#define G_MASK 0xff00
++
++#define RB_MASK 0xff00ff
++#define AG_MASK 0xff00ff00
++#define RB_ONE_HALF 0x800080
++#define RB_MASK_PLUS_ONE 0x10000100
++
++#define ALPHA_8(x) ((x) >> A_SHIFT)
++#define RED_8(x) (((x) >> R_SHIFT) & MASK)
++#define GREEN_8(x) (((x) >> G_SHIFT) & MASK)
++#define BLUE_8(x) ((x) & MASK)
++
++/*
++ * Helper macros.
++ */
++
++#define MUL_UN8(a, b, t)						\
++    ((t) = (a) * (b) + ONE_HALF, ((((t) >> G_SHIFT ) + (t) ) >> G_SHIFT ))
++
++#define DIV_UN8(a, b)							\
++    (((uint16_t) (a) * MASK) / (b))
++
++#define ADD_UN8(x, y, t)				     \
++    ((t) = (x) + (y),					     \
++     (uint32_t) (uint8_t) ((t) | (0 - ((t) >> G_SHIFT))))
++
++#include "iwmmxt.h"
++
++static force_inline __m64
++pack8888 (__m64 lo, __m64 hi)
++{
++    return _mm_packs_pu16 (lo, hi);
++}
++
++static force_inline __m64
++shift (__m64 v,
++       int   s)
++{
++    if (s > 0)
++	return _mm_slli_si64 (v, s);
++    else if (s < 0)
++	return _mm_srli_si64 (v, -s);
++    else
++	return v;
++}
++
++static force_inline __m64
++load8888 (uint32_t v)
++{
++    return _mm_unpacklo_pi8 (_mm_cvtsi32_si64 (v), _mm_setzero_si64 ());
++}
++
++static force_inline uint32_t
++store8888 (__m64 v)
++{
++    return _mm_cvtsi64_si32 (pack8888 (v, _mm_setzero_si64 ()));
++}
++
++static force_inline __m64
++expand_alpha (__m64 pixel)
++{
++    __m64 t1, t2;
++
++    t1 = shift (pixel, -48);
++    t2 = shift (t1, 16);
++    t1 = _mm_or_si64 (t1, t2);
++    t2 = shift (t1, 32);
++    t1 = _mm_or_si64 (t1, t2);
++
++    return t1;
++}
++
++static force_inline __m64
++pix_multiply (__m64 a, __m64 b)
++{
++    __m64 res;
++
++    res = _mm_mullo_pi16 (a, b);
++    res = _mm_adds_pu16 (res, MC (4x0080));
++    res = _mm_adds_pu16 (res, _mm_srli_pi16 (res, 8));
++    res = _mm_srli_pi16 (res, 8);
++
++    return res;
++}
++
++static __inline__ uint32_t ldl_u(uint32_t *p)
++{
++    struct __una_u32 { uint32_t x __attribute__((packed)); };
++    const struct __una_u32 *ptr = (const struct __una_u32 *) p;
++    return ptr->x;
++}
++
++static force_inline __m64
++in (__m64 src, __m64 mask)
++{
++    return pix_multiply (src, mask);
++}
++
++
++#endif /* IWMMXT_H_ */

@@ -1,0 +1,12 @@
+Index: epdfview-0.1.8/src/gtk/PageView.cxx
+===================================================================
+--- epdfview-0.1.8.orig/src/gtk/PageView.cxx	2012-01-08 00:21:05.000000000 +0100
++++ epdfview-0.1.8/src/gtk/PageView.cxx	2012-01-08 00:21:27.000000000 +0100
+@@ -25,7 +25,7 @@
+ using namespace ePDFView;
+ 
+ // Constants
+-static gint PAGE_VIEW_PADDING = 12;
++static gint PAGE_VIEW_PADDING = 0;
+ static gint SCROLL_PAGE_DRAG_LENGTH = 50;
+ static const gint PIXBUF_BITS_PER_SAMPLE = 8;

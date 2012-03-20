@@ -1,0 +1,32 @@
+From 05cfdee7b19da6bcacf02cda655e4a82c7463cbb Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Wed, 4 Jan 2012 20:28:04 +0100
+Subject: [PATCH 07/15] Prevent mousedev from enumerating the touchscreen.
+
+---
+ drivers/input/mousedev.c |    2 ++
+ 1 files changed, 2 insertions(+), 0 deletions(-)
+
+diff --git a/drivers/input/mousedev.c b/drivers/input/mousedev.c
+index 0110b5a..be8ac37 100644
+--- a/drivers/input/mousedev.c
++++ b/drivers/input/mousedev.c
+@@ -1019,6 +1019,7 @@ static const struct input_device_id mousedev_ids[] = {
+ 		.evbit = { BIT_MASK(EV_KEY) | BIT_MASK(EV_REL) },
+ 		.relbit = { BIT_MASK(REL_WHEEL) },
+ 	},	/* A separate scrollwheel */
++#if 0
+ 	{
+ 		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+ 				INPUT_DEVICE_ID_MATCH_KEYBIT |
+@@ -1028,6 +1029,7 @@ static const struct input_device_id mousedev_ids[] = {
+ 		.absbit = { BIT_MASK(ABS_X) | BIT_MASK(ABS_Y) },
+ 	},	/* A tablet like device, at least touch detection,
+ 		   two absolute axes */
++#endif 
+ 	{
+ 		.flags = INPUT_DEVICE_ID_MATCH_EVBIT |
+ 				INPUT_DEVICE_ID_MATCH_KEYBIT |
+-- 
+1.7.4.1
+

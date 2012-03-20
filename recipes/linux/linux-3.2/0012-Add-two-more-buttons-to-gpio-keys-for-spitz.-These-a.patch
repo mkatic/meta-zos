@@ -1,0 +1,37 @@
+From 78e415dc01416261958a4ad0bdc768f2e1103d81 Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Tue, 14 Feb 2012 16:15:07 +0100
+Subject: [PATCH 12/15] Add two more buttons to gpio-keys for spitz. These are used for
+ automatic USB host/client switching in zaurusd.
+
+---
+ arch/arm/mach-pxa/spitz.c |   13 +++++++++++++
+ 1 files changed, 13 insertions(+), 0 deletions(-)
+
+diff --git a/arch/arm/mach-pxa/spitz.c b/arch/arm/mach-pxa/spitz.c
+index 7b6ea56..a9f9a76 100644
+--- a/arch/arm/mach-pxa/spitz.c
++++ b/arch/arm/mach-pxa/spitz.c
+@@ -429,6 +429,19 @@ static struct gpio_keys_button spitz_gpio_keys[] = {
+ 		.gpio	= SPITZ_GPIO_SWB,
+ 		.desc	= "Lid Closed",
+ 	},
++	/* Two buttons for detecting USB host/client mode */
++	{
++		.type	= EV_SW,
++		.code	= 2,
++		.gpio	= SPITZ_GPIO_USB_DEVICE,
++		.desc	= "USB client connected",
++	},
++	{
++		.type	= EV_SW,
++		.code	= 3,
++		.gpio	= SPITZ_GPIO_USB_CONNECT,
++		.desc	= "USB host cable connected",
++	},
+ };
+ 
+ static struct gpio_keys_platform_data spitz_gpio_keys_platform_data = {
+-- 
+1.7.4.1
+

@@ -1,0 +1,8 @@
+# Configuration for the Makefile
+LIBS := -ljbig2dec -lopenjpeg -ljpeg -lz -lm
+CFLAGS := -Wall -DARCH_ARM --std=gnu99 -Ifitz -Ipdf -Ixps -Icbz $(THIRD_INCS)
+
+CFLAGS += `pkg-config --cflags freetype2`
+LDFLAGS += `pkg-config --libs freetype2`
+X11_LIBS = -lX11 -lXext
+PDFVIEW_EXE = $(X11VIEW_EXE)

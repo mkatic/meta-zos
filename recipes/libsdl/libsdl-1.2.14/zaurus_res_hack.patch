@@ -1,0 +1,193 @@
+diff --git a/src/video/fbcon/SDL_fbvideo.c b/src/video/fbcon/SDL_fbvideo.c
+index 8a3898e..6da0451 100644
+--- a/src/video/fbcon/SDL_fbvideo.c
++++ b/src/video/fbcon/SDL_fbvideo.c
+@@ -66,21 +66,10 @@ static inline void outb (unsigned char value, unsigned short port)
+ 
+ /* A list of video resolutions that we query for (sorted largest to smallest) */
+ static const SDL_Rect checkres[] = {
+-	{  0, 0, 1600, 1200 },		/* 16 bpp: 0x11E, or 286 */
+-	{  0, 0, 1408, 1056 },		/* 16 bpp: 0x19A, or 410 */
+-	{  0, 0, 1280, 1024 },		/* 16 bpp: 0x11A, or 282 */
+-	{  0, 0, 1152,  864 },		/* 16 bpp: 0x192, or 402 */
+-	{  0, 0, 1024,  768 },		/* 16 bpp: 0x117, or 279 */
+-	{  0, 0,  960,  720 },		/* 16 bpp: 0x18A, or 394 */
+-	{  0, 0,  800,  600 },		/* 16 bpp: 0x114, or 276 */
+-	{  0, 0,  768,  576 },		/* 16 bpp: 0x182, or 386 */
+-	{  0, 0,  720,  576 },		/* PAL */
+-	{  0, 0,  720,  480 },		/* NTSC */
+-	{  0, 0,  640,  480 },		/* 16 bpp: 0x111, or 273 */
+-	{  0, 0,  640,  400 },		/*  8 bpp: 0x100, or 256 */
+-	{  0, 0,  512,  384 },
++	{  0, 0,  640,  480 },
++	{  0, 0,  480,  640 },
+ 	{  0, 0,  320,  240 },
+-	{  0, 0,  320,  200 }
++	{  0, 0,  240,  320 }
+ };
+ static const struct {
+ 	int xres;
+@@ -96,34 +85,17 @@ static const struct {
+ 	int vmode;
+ } vesa_timings[] = {
+ #ifdef USE_VESA_TIMINGS	/* Only tested on Matrox Millenium I */
+-	{  640,  400, 39771,  48, 16, 39,  8,  96, 2, 2, 0 },	/* 70 Hz */
+-	{  640,  480, 39683,  48, 16, 33, 10,  96, 2, 0, 0 },	/* 60 Hz */
+-	{  768,  576, 26101, 144, 16, 28,  6, 112, 4, 0, 0 },	/* 60 Hz */
+-	{  800,  600, 24038, 144, 24, 28,  8, 112, 6, 0, 0 },	/* 60 Hz */
+-	{  960,  720, 17686, 144, 24, 28,  8, 112, 4, 0, 0 },	/* 60 Hz */
+-	{ 1024,  768, 15386, 160, 32, 30,  4, 128, 4, 0, 0 },	/* 60 Hz */
+-	{ 1152,  864, 12286, 192, 32, 30,  4, 128, 4, 0, 0 },	/* 60 Hz */
+-	{ 1280, 1024,  9369, 224, 32, 32,  4, 136, 4, 0, 0 },	/* 60 Hz */
+-	{ 1408, 1056,  8214, 256, 40, 32,  5, 144, 5, 0, 0 },	/* 60 Hz */
+-	{ 1600, 1200,/*?*/0, 272, 48, 32,  5, 152, 5, 0, 0 },	/* 60 Hz */
++	{  640,  480, 39683,  48, 16, 33, 10,  96, 2, 0, 0 }	/* 60 Hz */
+ #else
+ 	/* You can generate these timings from your XF86Config file using
+ 	   the 'modeline2fb' perl script included with the fbset package.
+ 	   These timings were generated for Matrox Millenium I, 15" monitor.
+ 	*/
+-	{  320,  200, 79440,  16, 16, 20,  4,  48, 1, 0, 2 },	/* 70 Hz */
+-	{  320,  240, 63492,  16, 16, 16,  4,  48, 2, 0, 2 },	/* 72 Hz */
+-	{  512,  384, 49603,  48, 16, 16,  1,  64, 3, 0, 0 },	/* 78 Hz */
+-	{  640,  400, 31746,  96, 32, 41,  1,  64, 3, 2, 0 },	/* 85 Hz */
+-	{  640,  480, 31746, 120, 16, 16,  1,  64, 3, 0, 0 },	/* 75 Hz */
+-	{  768,  576, 26101, 144, 16, 28,  6, 112, 4, 0, 0 },	/* 60 Hz */
+-	{  800,  600, 20000,  64, 56, 23, 37, 120, 6, 3, 0 },	/* 72 Hz */
+-	{  960,  720, 17686, 144, 24, 28,  8, 112, 4, 0, 0 },	/* 60 Hz */
+-	{ 1024,  768, 13333, 144, 24, 29,  3, 136, 6, 0, 0 },	/* 70 Hz */
+-	{ 1152,  864, 12286, 192, 32, 30,  4, 128, 4, 0, 0 },	/* 60 Hz */
+-	{ 1280, 1024,  9369, 224, 32, 32,  4, 136, 4, 0, 0 },	/* 60 Hz */
+-	{ 1408, 1056,  8214, 256, 40, 32,  5, 144, 5, 0, 0 },	/* 60 Hz */
+-	{ 1600, 1200,/*?*/0, 272, 48, 32,  5, 152, 5, 0, 0 },	/* 60 Hz */
++	{  320,  240, 134617,  20, 46, 1,  0,  20, 2, 0, 2 },	/* 72 Hz */
++	{  240,  320, 134617,  20, 46, 1,  0,  20, 2, 0, 2 },	/* 72 Hz */
++	{  640,  480, 38462, 46, 125, 1,  0,  40, 3, 0, 512  },
++	{  480,  640, 38462, 46, 125, 1,  0,  40, 3, 0, 512  }
++
+ #endif
+ };
+ enum {
+@@ -573,12 +545,19 @@ static int FB_VideoInit(_THIS, SDL_PixelFormat *vformat)
+ 		}
+ 	}
+ 
++	/* Determine the current screen depth */
++	if ( ioctl(console_fd, FBIOGET_VSCREENINFO, &vinfo) < 0 ) {
++		SDL_SetError("Couldn't get console pixel format");
++		FB_VideoQuit(this);
++		return(-1);
++	}
++
+ 	/* Memory map the device, compensating for buggy PPC mmap() */
+ 	mapped_offset = (((long)finfo.smem_start) -
+ 	                (((long)finfo.smem_start)&~(pagesize-1)));
+-	mapped_memlen = finfo.smem_len+mapped_offset;
+-	mapped_mem = do_mmap(NULL, mapped_memlen,
+-	                  PROT_READ|PROT_WRITE, MAP_SHARED, console_fd, 0);
++	mapped_memlen = ((vinfo.xres * vinfo.yres) * (vinfo.bits_per_pixel/8));
++	mapped_mem = (char *) ioctl(console_fd, FBIOGET_VRAM_START_ADDRESS, 0);
++
+ 	if ( mapped_mem == (char *)-1 ) {
+ 		SDL_SetError("Unable to memory map the video hardware");
+ 		mapped_mem = NULL;
+@@ -586,12 +565,6 @@ static int FB_VideoInit(_THIS, SDL_PixelFormat *vformat)
+ 		return(-1);
+ 	}
+ 
+-	/* Determine the current screen depth */
+-	if ( ioctl(console_fd, FBIOGET_VSCREENINFO, &vinfo) < 0 ) {
+-		SDL_SetError("Couldn't get console pixel format");
+-		FB_VideoQuit(this);
+-		return(-1);
+-	}
+ 	vformat->BitsPerPixel = vinfo.bits_per_pixel;
+ 	if ( vformat->BitsPerPixel < 8 ) {
+ 		/* Assuming VGA16, we handle this via a shadow framebuffer */
+@@ -738,6 +711,8 @@ static int FB_VideoInit(_THIS, SDL_PixelFormat *vformat)
+ 				}
+ 			}
+ 		}
++		/* ugly, dirty hack */
++	FB_AddMode(this, 1, 320, 240, 1);
+ 	}
+ 
+ 	this->info.current_w = current_w;
+@@ -782,7 +757,9 @@ static int FB_VideoInit(_THIS, SDL_PixelFormat *vformat)
+ 	}
+ 
+ 	if (shadow_fb) {
+-		shadow_mem = ((char *) ioctl(console_fd, FBIOGET_VRAM_END_ADDRESS, 0)) - mapped_memlen;
++		shadow_mem = ((char *) ioctl(console_fd, FBIOGET_VRAM_END_ADDRESS, 0));
++		shadow_mem -= mapped_memlen;
++
+ 		if (shadow_mem == NULL) {
+ 			SDL_SetError("No memory for shadow");
+ 			return (-1);
+@@ -1053,14 +1030,23 @@ static SDL_Surface *FB_SetVideoMode(_THIS, SDL_Surface *current,
+ 		print_vinfo(&vinfo);
+ #endif
+ 		if ( !shadow_fb &&
+-				ioctl(console_fd, FBIOPUT_VSCREENINFO, &vinfo) < 0 ) {
+-			vinfo.yres_virtual = height;
++				ioctl(console_fd, FBIOPUT_VSCREENINFO, &vinfo) < 0 )
++					vinfo.yres_virtual = height;
++			}
++		if (width == 320 && height == 240) {
++			vinfo.xres = 240;
++			vinfo.yres = 320;
++			}
++		if (width == 640 && height == 480) {
++			vinfo.xres = 480;
++			vinfo.yres = 640;
++			}
+ 			if ( ioctl(console_fd, FBIOPUT_VSCREENINFO, &vinfo) < 0 ) {
+ 				SDL_SetError("Couldn't set console screen info");
+ 				return(NULL);
+ 			}
+-		}
+-	} else {
++
++	 else {
+ 		int maxheight;
+ 
+ 		/* Figure out how much video memory is available */
+@@ -1073,6 +1059,14 @@ static SDL_Surface *FB_SetVideoMode(_THIS, SDL_Surface *current,
+ 			vinfo.yres_virtual = maxheight;
+ 		}
+ 	}
++	if (width == 320 && height == 240) {
++		vinfo.xres = 320;
++		vinfo.yres = 240;
++	}
++	if (width == 640 && height == 480) {
++		vinfo.xres = 640;
++		vinfo.yres = 480;
++	}
+ 	cache_vinfo = vinfo;
+ #ifdef FBCON_DEBUG
+ 	fprintf(stderr, "Printing actual vinfo:\n");
+@@ -1105,6 +1099,12 @@ static SDL_Surface *FB_SetVideoMode(_THIS, SDL_Surface *current,
+ 		SDL_SetError("Couldn't get console hardware info");
+ 		return(NULL);
+ 	}
++	if (width == 320 && height == 240) {
++		finfo.smem_len = finfo.smem_len / 4;
++		mapped_memlen = ((vinfo.xres * vinfo.yres) * (vinfo.bits_per_pixel/8));
++		shadow_mem = ((char *) ioctl(console_fd, FBIOGET_VRAM_END_ADDRESS, 0));
++		shadow_mem -= mapped_memlen;
++	}
+ 
+ 	/* Save hardware palette, if needed */
+ 	FB_SavePalette(this, &finfo, &vinfo);
+@@ -1946,10 +1946,6 @@ static void FB_VideoQuit(_THIS)
+ 	/* Close console and input file descriptors */
+ 	if ( console_fd > 0 ) {
+ 		/* Unmap the video framebuffer and I/O registers */
+-		if ( mapped_mem ) {
+-			munmap(mapped_mem, mapped_memlen);
+-			mapped_mem = NULL;
+-		}
+ 		if ( mapped_io ) {
+ 			munmap(mapped_io, mapped_iolen);
+ 			mapped_io = NULL;

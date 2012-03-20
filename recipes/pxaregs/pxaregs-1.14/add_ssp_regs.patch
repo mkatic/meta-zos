@@ -1,0 +1,24 @@
+Index: pxaregs-1.14-r0/pxaregs.c
+===================================================================
+--- pxaregs-1.14-r0.orig/pxaregs.c	2012-02-15 23:30:05.000000000 +0100
++++ pxaregs-1.14-r0/pxaregs.c	2012-02-15 23:31:00.000000000 +0100
+@@ -270,6 +270,19 @@
+ { "RCSR_SMR",  0x40F00030,  2, 0x00000001, 'd', "PM sleep mode occurred" },
+ { "RCSR_GFR",  0x40F00030,  3, 0x00000001, 'd', "PM GPIO reset  occurred" },
+ 
++//SSP registers
++{ "SSCR1_0", 0x41000000,	0, 0xffffffff, 'x',	"SSP1 Control register 0" },
++{ "SSCR1_1", 0x41000004,	0, 0xffffffff, 'x',	"SSP1 Control register 1" },
++{ "SSSR1",   0x41000008,	0, 0xffffffff, 'x',	"SSP1 Status register 1" },
++{ "SSCR2_0", 0x41700000,	0, 0xffffffff, 'x',	"SSP2 Control register 0" },
++{ "SSCR2_1", 0x41700004,	0, 0xffffffff, 'x',	"SSP2 Control register 1" },
++{ "SSSR2",   0x41700008,	0, 0xffffffff, 'x',	"SSP1 Status register 2" },
++{ "SSCR3_0", 0x41900000,	0, 0xffffffff, 'x',	"SSP3 Control register 0" },
++{ "SSCR3_1", 0x41900004,	0, 0xffffffff, 'x',	"SSP3 Control register 1" },
++{ "SSPSP1",  0x4100002C,	0, 0xffffffff, 'x',	"SSP1 Programmable Serial Protocol Register" },
++{ "SSPSP2",  0x4170002C,	0, 0xffffffff, 'x',	"SSP2 Programmable Serial Protocol Register" },
++{ "SSPSP3",  0x4190002C,	0, 0xffffffff, 'x',	"SSP3 Programmable Serial Protocol Register" },
++
+ // PXA255
+ { "PMFW",      0x40F00034,  0, 0xffffffff, 'x', "Power Manager Fast Sleep Wakeup Register (3-31)" },
+ { "PMFW_FWAKE",0x40F00034,  1, 0x00000001, 'x', "Fast Wakeup Enable" },

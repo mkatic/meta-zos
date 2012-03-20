@@ -1,0 +1,34 @@
+Index: geany-0.21/configure.ac
+===================================================================
+--- geany-0.21.orig/configure.ac	2012-02-01 15:14:31.000000000 +0100
++++ geany-0.21/configure.ac	2012-02-01 15:15:51.000000000 +0100
+@@ -18,8 +18,9 @@
+ AC_PROG_CXX
+ # check for C++ compiler explicitly and fail if none is found, do this check
+ # after AC_PROG_CXX has set the CXX environment variable
+-which $CXX >/dev/null 2>&1
+-if test "x$?" != "x0"; then
++AC_PATH_PROG([COMPILER], [$CXX])
++if ! test -x "${COMPILER}"
++then
+ 	AC_MSG_ERROR([No C++ compiler found. Please install a C++ compiler.])
+ fi
+ 
+@@ -50,7 +51,7 @@
+ 
+ # get svn revision (try GIT first, then check for SVN)
+ REVISION="r0"
+-GIT=`which git 2>/dev/null`
++AC_PATH_PROG([GIT], [git])
+ if test -d ".git" -a "x${GIT}" != "x" -a -x "${GIT}"
+ then
+ 	# check for git-svn repo first - find-rev (v1.5.4.1) doesn't always fail with git-only repo
+@@ -63,7 +64,7 @@
+ fi
+ if test "x${REVISION}" = "xr0"
+ then
+-	SVN=`which svn 2>/dev/null`
++	AC_PATH_PROG([GIT], [git])
+ 	if test -d ".svn" -a "x${SVN}" != "x" -a -x "${SVN}"
+ 	then
+ 		REVISION=r`$SVN info|grep 'Last Changed Rev'|cut -d' ' -f4`

@@ -1,0 +1,12 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides: alsactl-store
+# Required-Start: 2 3 4 5
+# Required-Stop: 1 6
+# Default-Start: 2 3 4 5
+# Default-Stop: 1 6
+### END INIT INFO
+
+alsactl -f /etc/asound.state store
+
+exit 0

@@ -1,0 +1,13 @@
+Index: epdfview-0.1.8/po/Makefile.in.in
+===================================================================
+--- epdfview-0.1.8.orig/po/Makefile.in.in	2012-01-07 23:53:17.000000000 +0100
++++ epdfview-0.1.8/po/Makefile.in.in	2012-01-07 23:53:55.000000000 +0100
+@@ -29,7 +29,7 @@
+ 
+ INSTALL = @INSTALL@
+ INSTALL_DATA = @INSTALL_DATA@
+-MKINSTALLDIRS = @MKINSTALLDIRS@
++MKINSTALLDIRS = $(top_builddir)/./mkinstalldirs 
+ mkinstalldirs = $(SHELL) $(MKINSTALLDIRS)
+ 
+ GMSGFMT = @GMSGFMT@

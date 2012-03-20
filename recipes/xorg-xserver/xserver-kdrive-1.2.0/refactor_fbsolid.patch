@@ -1,0 +1,25 @@
+diff --git a/fb/fbsolid.c b/fb/fbsolid.c
+index eedfe7f..02c7052 100644
+--- a/fb/fbsolid.c
++++ b/fb/fbsolid.c
+@@ -110,17 +110,9 @@ fbSolid (FbBits	    *dst,
+                 dst++;
+             }
+             n = nmiddle;
+-            if (!args->and) {
+-                memset_fbbits(dst, xor, n);
+-                dst += n;
+-            }
+-            else {
+-                while (n--)
+-                {
+-                    *dst = FbDoRRop (*dst, args->and, xor);
+-                    dst++;
+-                }
+-            }
++            memset_fbbits(dst, xor, n);
++            dst += n;
++
+             if (endmask)
+                 FbDoRightMaskByteRRop(dst,endbyte,endmask,args->and,xor);
+             dst += dstStride;

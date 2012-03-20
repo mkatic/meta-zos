@@ -1,0 +1,33 @@
+commit e29e67d10cc7d1e00a0bf2cc5587f88d6d29cf1d
+Author: Marko Katic <dromede.gmail.com>
+Date:   Wed Oct 5 23:31:18 2011 +0200
+
+    Replace mmap and malloc with ioctl's.
+
+diff --git a/src/video/fbcon/SDL_fbvideo.c b/src/video/fbcon/SDL_fbvideo.c
+index 81a89da..8a3898e 100644
+--- a/src/video/fbcon/SDL_fbvideo.c
++++ b/src/video/fbcon/SDL_fbvideo.c
+@@ -184,11 +184,8 @@ static int SDL_getpagesize(void)
+ static void *do_mmap(void *start, size_t length, int prot, int flags, int fd, off_t offset)
+ {
+ 	void *ret;
+-	ret = mmap(start, length, prot, flags, fd, offset);
+-	if ( ret == (char *)-1 && (flags & MAP_SHARED) ) {
+-		ret = mmap(start, length, prot,
+-		           (flags & ~MAP_SHARED) | MAP_PRIVATE, fd, offset);
+-	}
++	ret = (char *) ioctl(fd, FBIOGET_VRAM_START_ADDRESS, 0);
++
+ 	return ret;
+ }
+ 
+@@ -785,7 +782,7 @@ static int FB_VideoInit(_THIS, SDL_PixelFormat *vformat)
+ 	}
+ 
+ 	if (shadow_fb) {
+-		shadow_mem = (char *)SDL_malloc(mapped_memlen);
++		shadow_mem = ((char *) ioctl(console_fd, FBIOGET_VRAM_END_ADDRESS, 0)) - mapped_memlen;
+ 		if (shadow_mem == NULL) {
+ 			SDL_SetError("No memory for shadow");
+ 			return (-1);

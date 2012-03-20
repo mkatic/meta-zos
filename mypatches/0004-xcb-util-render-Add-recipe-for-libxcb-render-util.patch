@@ -1,0 +1,35 @@
+From 41acdf74996d4fbc14e7d101554715fb9c717859 Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Fri, 16 Mar 2012 00:18:43 +0100
+Subject: [PATCH 4/5] xcb-util-render: Add recipe that provides libxcb-render-util
+
+Xcb-util was split into separate packages in the 0.3.6 -> 0.3.8 transition.
+This library was previously provided by xcb-util and is now a separate package.
+---
+ .../xcb/xcb-util-renderutil_0.3.8.bb               |   14 ++++++++++++++
+ 1 files changed, 14 insertions(+), 0 deletions(-)
+ create mode 100644 meta/recipes-graphics/xcb/xcb-util-renderutil_0.3.8.bb
+
+diff --git a/meta/recipes-graphics/xcb/xcb-util-renderutil_0.3.8.bb b/meta/recipes-graphics/xcb/xcb-util-renderutil_0.3.8.bb
+new file mode 100644
+index 0000000..c729db8
+--- /dev/null
++++ b/meta/recipes-graphics/xcb/xcb-util-renderutil_0.3.8.bb
+@@ -0,0 +1,14 @@
++require xcb-util.inc
++
++LICENSE = "MIT"
++LIC_FILES_CHKSUM = "file://renderutil/glyph.c;endline=24;md5=c517c483b8d726234ec94f9169236661 \
++					file://renderutil/util.c;endline=20;md5=6e0bfc44fb13298c0f4694eb70dc80d4 \
++					file://renderutil/xcb_renderutil.h;md5=c8732d30d204d3b55e956489f635cefb \
++					"
++PR = "r0"
++
++SRC_URI[md5sum] = "b346ff598ee093c141f836fbc0f8f721"
++SRC_URI[sha256sum] = "9789a5c55728fa7bae374d9fdf1c61095869bdc68561911760879095644c7452"
++
++
++
+-- 
+1.7.4.1
+

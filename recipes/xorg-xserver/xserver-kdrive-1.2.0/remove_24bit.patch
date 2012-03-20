@@ -1,0 +1,53 @@
+commit a552b011882c25d7beca05eefbc4b2548dfd6483
+Author: Marko Katic <dromede.gmail.com>
+Date:   Fri Feb 10 18:52:58 2012 +0100
+
+    Remove references to 24bit code so we can remove support
+    for 24 bit pixels.
+
+diff --git a/exa/exa_accel.c b/exa/exa_accel.c
+index bc77a40..932d88b 100644
+--- a/exa/exa_accel.c
++++ b/exa/exa_accel.c
+@@ -1,7 +1,7 @@
+ /*
+- * Copyright © 2001 Keith Packard
++ * Copyright ï¿½ 2001 Keith Packard
+  *
+- * Partly based on code that is Copyright © The XFree86 Project Inc.
++ * Partly based on code that is Copyright ï¿½ The XFree86 Project Inc.
+  *
+  * Permission to use, copy, modify, distribute, and sell this software and its
+  * documentation for any purpose is hereby granted without fee, provided that
+@@ -840,7 +840,6 @@ exaImageGlyphBlt (DrawablePtr	pDrawable,
+     switch (pDrawable->bitsPerPixel) {
+     case 8:	glyph = fbGlyph8; break;
+     case 16:    glyph = fbGlyph16; break;
+-    case 24:    glyph = fbGlyph24; break;
+     case 32:    glyph = fbGlyph32; break;
+     }
+ 
+diff --git a/hw/kdrive/src/kaa.c b/hw/kdrive/src/kaa.c
+index c29e9e9..3c1650f 100644
+--- a/hw/kdrive/src/kaa.c
++++ b/hw/kdrive/src/kaa.c
+@@ -1,9 +1,9 @@
+ /*
+  * $RCSId: xc/programs/Xserver/hw/kdrive/kaa.c,v 1.4 2001/06/04 09:45:41 keithp Exp $
+  *
+- * Copyright © 2001 Keith Packard
++ * Copyright ï¿½ 2001 Keith Packard
+  *
+- * Partly based on code that is Copyright © The XFree86 Project Inc.
++ * Partly based on code that is Copyright ï¿½ The XFree86 Project Inc.
+  *
+  * Permission to use, copy, modify, distribute, and sell this software and its
+  * documentation for any purpose is hereby granted without fee, provided that
+@@ -791,7 +791,6 @@ kaaImageGlyphBlt (DrawablePtr	pDrawable,
+     switch (dstBpp) {
+     case 8:	glyph = fbGlyph8; break;
+     case 16:    glyph = fbGlyph16; break;
+-    case 24:    glyph = fbGlyph24; break;
+     case 32:    glyph = fbGlyph32; break;
+     }
+     

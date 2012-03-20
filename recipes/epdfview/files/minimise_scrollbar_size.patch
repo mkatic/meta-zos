@@ -1,0 +1,14 @@
+Index: epdfview-0.1.8/src/gtk/PageView.cxx
+===================================================================
+--- epdfview-0.1.8.orig/src/gtk/PageView.cxx	2012-01-08 01:16:10.000000000 +0100
++++ epdfview-0.1.8/src/gtk/PageView.cxx	2012-01-08 01:20:12.000000000 +0100
+@@ -54,6 +54,9 @@
+     gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (m_PageScroll),
+                                     GTK_POLICY_AUTOMATIC,
+                                     GTK_POLICY_AUTOMATIC);
++                                    
++     gtk_widget_set_size_request(gtk_scrolled_window_get_hscrollbar(GTK_SCROLLED_WINDOW (m_PageScroll)), 0, 0);                       
++     gtk_widget_set_size_request(gtk_scrolled_window_get_vscrollbar(GTK_SCROLLED_WINDOW (m_PageScroll)), 0, 0);  
+ 
+     // The actual page image.
+     m_PageImage = gtk_image_new ();

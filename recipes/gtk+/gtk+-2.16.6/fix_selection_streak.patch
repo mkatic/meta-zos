@@ -1,0 +1,21 @@
+Index: gtk+-2.16.6/gtk/gtktreeview.c
+===================================================================
+--- gtk+-2.16.6.orig/gtk/gtktreeview.c	2012-02-12 00:19:52.000000000 +0100
++++ gtk+-2.16.6/gtk/gtktreeview.c	2012-02-12 00:07:58.000000000 +0100
+@@ -8914,7 +8914,7 @@
+     {
+       /* We process updates because we want to clear old selected items when we scroll.
+        * if this is removed, we get a "selection streak" at the bottom. */
+-      gdk_window_process_updates (tree_view->priv->bin_window, TRUE);
++      
+       gtk_tree_view_scroll_to_cell (tree_view, path, NULL, FALSE, 0.0, 0.0);
+       gtk_tree_path_free (path);
+     }
+@@ -10636,6 +10636,7 @@
+ 		}
+ 	    }
+ 	}
++	  gdk_window_process_updates (tree_view->priv->bin_window, TRUE);
+       gdk_window_scroll (tree_view->priv->bin_window, 0, dy);
+ 
+       if (tree_view->priv->dy != (int) tree_view->priv->vadjustment->value)

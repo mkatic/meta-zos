@@ -1,0 +1,263 @@
+diff --git a/miext/shadow/Makefile.am b/miext/shadow/Makefile.am
+index a73d0ec..bab1045 100644
+--- a/miext/shadow/Makefile.am
++++ b/miext/shadow/Makefile.am
+@@ -1,5 +1,7 @@
+ noinst_LTLIBRARIES = libshadow.la
+ 
++
++
+ AM_CFLAGS = $(DIX_CFLAGS)
+ 
+ INCLUDES = -I$(top_srcdir)/hw/xfree86/os-support
+@@ -31,4 +33,5 @@ libshadow_la_SOURCES =		\
+ 	shrot8pack.c		\
+ 	shrotate.c		\
+ 	shrotpack.h		\
+-	shrotpackYX.h
++	shrotpackYX.h		\
++	iwmmxt_rotate_copy.s
+diff --git a/miext/shadow/iwmmxt_rotate_copy.s b/miext/shadow/iwmmxt_rotate_copy.s
+new file mode 100644
+index 0000000..f6dac05
+--- /dev/null
++++ b/miext/shadow/iwmmxt_rotate_copy.s
+@@ -0,0 +1,60 @@
++@ r0 - shadowfb line
++@ r1 - fb proper line
++@ r2 - shadowfb stride
++@ r3 - width
++	.code 32
++	.arch iwmmxt
++	.cpu iwmmxt
++	.text
++	.global iwmmxt_rotate_copy
++iwmmxt_rotate_copy:
++	mov r4, r0	@ save shaBase
++	mov r6, #16	@ used for 2 pixel bitwise rotation
++	mov r7, #32	@ used for 4 pixel bitwise rotation
++	tmcr wcgr0, r6
++	tmcr wcgr1, r7
++iwmmxt_rotate_copy_main_loop:
++	wldrd wr0,[r0]
++	add r0, r0, r2
++	wldrd wr1,[r0]
++	add r0, r0, r2
++	wldrd wr2,[r0]
++	add r0, r0, r2
++	wldrd wr3,[r0]
++	@ Block transpose
++	wunpckihh wr4, wr0, wr1
++	wunpckihh wr5, wr2, wr3
++	wunpckilh wr6, wr0, wr1
++	wunpckilh wr7, wr2, wr3
++	wunpckihw wr0, wr4, wr5
++	wunpckilw wr1, wr4, wr5
++	wunpckihw wr2, wr6, wr7
++	wunpckilw wr3, wr6, wr7
++	@Block rotate to portrait and write to fb proper
++	wrorwg wr3, wr3, wcgr0
++	wrordg wr3, wr3, wcgr1
++	wstrd wr3,[r1] 
++	wrorwg wr2, wr2, wcgr0
++	wrordg wr2, wr2, wcgr1
++	add r1, #960
++	wstrd wr2,[r1]
++	wrorwg wr1, wr1, wcgr0
++	wrordg wr1, wr1, wcgr1
++	add r1, #960
++	wstrd wr1,[r1]
++	wrorwg wr0, wr0, wcgr0
++	wrordg wr0, wr0, wcgr1
++	add r1, #960
++	wstrd wr0,[r1]
++	add r1, #960
++	subs r3, r3, #4 @ decrement width
++	beq exit
++	bmi exit
++	add r4, r4, #8	@ update shaBase
++	mov r0, r4
++	b iwmmxt_rotate_copy_main_loop
++	
++exit:
++	mov pc, lr
++	.end
++	
+diff --git a/miext/shadow/shrotpackYX.h b/miext/shadow/shrotpackYX.h
+index f51da2f..28e5ced 100644
+--- a/miext/shadow/shrotpackYX.h
++++ b/miext/shadow/shrotpackYX.h
+@@ -33,6 +33,7 @@
+ #include    "shadow.h"
+ #include    "fb.h"
+ 
++#define PIXELS_PER_BLOCK 4
+ #if ROTATE == 270
+ 
+ #define WINSTEPX(stride)    (stride)
+@@ -58,6 +59,9 @@
+ void
+ FUNC (ScreenPtr	    pScreen,
+       shadowBufPtr  pBuf);
++      
++extern inline void iwmmxt_rotate_copy (Data *shadowfb, Data *fb, 
++					FbStride stride, signed int nr_lines); 
+ 
+ void
+ FUNC (ScreenPtr	    pScreen,
+@@ -73,6 +77,7 @@ FUNC (ScreenPtr	    pScreen,
+     int		shaBpp;
+     int		shaXoff, shaYoff;   /* XXX assumed to be zero */
+     int		x, y, w, h;
++    int h_temp, w_prologue, h_prologue;
+     Data	*winBase, *win, *winLine;
+     CARD32	winSize;
+ 
+@@ -87,76 +92,79 @@ FUNC (ScreenPtr	    pScreen,
+ 					  SHADOW_WINDOW_WRITE,
+ 					  &winSize, pBuf->closure) - winBase;
+ 
+-    while (nbox--)
+-    {
+-        x = pbox->x1;
+-        y = pbox->y1;
+-        w = (pbox->x2 - pbox->x1);
+-        h = pbox->y2 - pbox->y1;
++/*the width and height of the rectangle
++ * should be modulo 4 = 0 aligned for the
++ * iwmmxt_rotate_copy. If not, reduce the
++ * rectangle with per pixel copy for width
++ * and height.
++ */
++while (nbox--) {
++	x = pbox->x1;
++	y = pbox->y1;
++	w = (pbox->x2 - pbox->x1);
++	h = pbox->y2 - pbox->y1;
++
++	w_prologue = w % PIXELS_PER_BLOCK;
++
++	if (w_prologue) {
++		shaLine = shaBase + (y * shaStride) + x;
++		winLine = winBase + WINSTART(x, y);
++		h_temp = h;
++		while (h_temp--)
++		{
++			sha = shaLine;
++			win = winLine;
++			while (sha < (shaLine + w_prologue))
++			{
++				*win = *sha++;
++				win += WINSTEPX(winStride);
++
++			 }
++			shaLine += shaStride;
++			winLine += WINSTEPY();
++		}
++		w -= w_prologue;
++		x += w_prologue;
++	}
++	h_prologue = h % PIXELS_PER_BLOCK;
++
++	if (h_prologue) {
++		shaLine = shaBase + (y * shaStride) + x;
++		winLine = winBase + WINSTART(x, y);
++		h_temp = h_prologue;
++		while (h_temp--)
++		{
++			sha = shaLine;
++			win = winLine;
++				while (sha < (shaLine + w))
++				{
++				    *win = *sha++;
++					win += WINSTEPX(winStride);
++				}
++			shaLine += shaStride;
++			winLine += WINSTEPY();
++		}
++	h -= h_prologue;
++	y += h_prologue;
++	}
+ 
+ 	shaLine = shaBase + (y * shaStride) + x;
+-#ifdef PREFETCH
+-	__builtin_prefetch (shaLine);
+-#endif
+-	winLine = winBase + WINSTART(x, y);
++	winLine = winBase + (((pScreen->height - PIXELS_PER_BLOCK) - y) + (x * winStride));
+ 
+-        while (h--)
+-        {
+-	    sha = shaLine;
+-	    win = winLine;
++	while (h > 0)
++	{
+ 
+-            while (sha < (shaLine + w - 16))
+-            {
+-#ifdef PREFETCH
+-		__builtin_prefetch (sha + shaStride);
+-#endif
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-            }
+-
+-            while (sha < (shaLine + w))
+-            {
+-		*win = *sha++;
+-		win += WINSTEPX(winStride);
+-            }
+-
+-	    y++;
+-	    shaLine += shaStride;
+-	    winLine += WINSTEPY();
+-        }
+-        pbox++;
+-    } /*  nbox */
++		sha = (int)shaLine & ~(0x7);
++		win = (int)winLine & ~(0x7);
++		/*rotate and copy 4x4 pixel blocks. */
++		iwmmxt_rotate_copy(sha, win, (shaStride * 2), w);
++
++		shaLine += (shaStride * PIXELS_PER_BLOCK);
++		winLine -= PIXELS_PER_BLOCK;
++		h-= PIXELS_PER_BLOCK;
++
++	}
++	}
++pbox++;
+ }
++

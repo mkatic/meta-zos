@@ -1,0 +1,117 @@
+diff --git a/src/config.h b/src/config.h
+index 73c140c..d37b725 100644
+--- a/src/config.h
++++ b/src/config.h
+@@ -24,12 +24,6 @@
+ #define __CONFIG_H__
+ 
+ /*
+- * Buttons
+- */
+-#define MATRIX_KBD_DEV  "/dev/input/by-path/platform-matrix-keypad-event" 
+-#define GPIO_BTN_DEV    "/dev/input/by-path/platform-gpio-keys-event"
+-
+-/*
+  * Backlight
+  */
+ 
+diff --git a/src/zaurusd.c b/src/zaurusd.c
+index 7ecd007..5b0e66f 100644
+--- a/src/zaurusd.c
++++ b/src/zaurusd.c
+@@ -30,6 +30,7 @@
+ #include <unistd.h>
+ #include <signal.h>
+ #include <time.h>
++#include <dirent.h>
+ #include <linux/input.h>
+ #include <evfilter.h>
+ 
+@@ -60,6 +61,59 @@ static void print_help(int exitstatus)
+ 	exit(exitstatus);
+ }
+ 
++/* find an evdev character device by driver name */
++static char *find_evdev (char *drv_name) { /* caller is responsible for freeing the pointer returned */
++
++	int fd, ret, file_found;
++	char *evdev_file, *evdev_found_name, *cwd;
++	DIR *evdev_dir;
++	struct dirent *entry;
++
++	file_found = 0; /* serves as a flag */
++	cwd = getcwd (NULL, 0); /* save cwd */
++
++	evdev_file = malloc(1024);
++	evdev_found_name = malloc (256);
++	memset (evdev_file, 0, 1024);
++	memset (evdev_found_name, 0 ,256);
++
++	evdev_dir = opendir("/dev/input");
++
++	chdir ("/dev/input");
++	while((entry = readdir(evdev_dir)) != NULL) {
++		if (entry->d_type != DT_CHR)
++			continue; /* only interested in character device files */
++
++		fd = open (entry->d_name, O_RDONLY);
++			if (fd < 0)
++				continue;
++
++		ret = ioctl(fd,EVIOCGNAME(256),evdev_found_name);
++		close(fd);
++
++		if (ret > 0) {
++			if (!strcmp(evdev_found_name, drv_name)) {
++				strcat (evdev_file, "/dev/input/");
++				strcat (evdev_file, entry->d_name);
++				file_found = 1;
++				break;
++			}
++
++		}
++	}
++
++closedir(evdev_dir);
++chdir(cwd); /* restore old cwd */
++free(cwd);
++free(evdev_found_name);
++
++if (file_found)
++	return evdev_file;
++else
++	return NULL;
++}
++
++
+ /*
+  * Read keys from spitz matrix keyboard.
+  */
+@@ -227,7 +281,7 @@ static int daemon_read(struct evf_io_queue_memb *self)
+ 	return EVF_IO_QUEUE_OK;
+ }
+ 
+-static void add_input(const char *dev, struct evf_io_queue *queue,
++static void add_input(char *dev, struct evf_io_queue *queue,
+                       int (*read)(struct evf_io_queue_memb *self))
+ {
+ 	int fd = open(dev, O_RDONLY);
+@@ -241,6 +295,7 @@ static void add_input(const char *dev, struct evf_io_queue *queue,
+ 		msg_print(MSG_WARN, "malloc failed :(");
+ 		exit(EXIT_FAILURE);
+ 	}
++	free(dev);
+ }
+ 
+ void sighandler(int sig __attribute__ ((unused)))
+@@ -299,8 +354,8 @@ int main(int argc, char *argv[])
+ 		exit(EXIT_FAILURE);
+ 	}
+ 
+-	add_input(MATRIX_KBD_DEV, queue, event_keyboard);
+-	add_input(GPIO_BTN_DEV, queue, event_gpio_btn);
++	add_input(find_evdev("matrix-keypad"), queue, event_keyboard);
++	add_input(find_evdev("gpio-keys"), queue, event_gpio_btn);
+ 	create_socket(queue);
+ 
+ 	if (dameonize) {

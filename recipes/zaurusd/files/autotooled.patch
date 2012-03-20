@@ -1,0 +1,4399 @@
+diff --git a/Makefile b/Makefile
+deleted file mode 100644
+index da28718..0000000
+--- a/Makefile
++++ /dev/null
+@@ -1,44 +0,0 @@
+-OBJECTS=pidfile.o backlight.o power.o time.o zaurusd.o msg.o\
+-        socket.o socket_cmd.o lcd.o sysfs.o display.o
+-CTL_OBJECTS=zaurusd-ctl.o msg.o socket.o
+-
+-all: zaurusd zaurusd-ctl
+-
+-zaurusd: $(OBJECTS)
+-	gcc $^ -levfilter -o zaurusd
+-
+-zaurusd-ctl: $(CTL_OBJECTS)
+-	gcc $^ -o zaurusd-ctl
+-
+-.c.o:
+-	gcc -W -Wall -I/usr/include/evfilter/ -c $< -o $@
+-
+-tar:
+-	cd .. && tar cjf zaurusd.tar.bz2 zaurusd
+-
+-clean:
+-	rm -f zaurusd zaurusd-ctl $(OBJECTS) $(CTL_OBJECTS)
+-
+-install:
+-	install -m 775 -d /etc/zaurusd/
+-	install -m 775 zaurusd /usr/sbin/
+-	install -m 775 zaurusd-ctl /usr/bin/
+-
+-install_debian: install
+-	install -m 775 debian/zaurusd /etc/init.d/zaurusd
+-	#create init symlinks
+-	update-rc.d zaurusd defaults
+-
+-backlight.o: backlight.c backlight.h sysfs.h config.h msg.h
+-display.o: display.c display.h lcd.h backlight.h
+-lcd.o: lcd.c lcd.h sysfs.h config.h
+-msg.o: msg.c msg.h
+-pidfile.o: pidfile.c pidfile.h msg.h
+-power.o: power.c config.h backlight.h power.h msg.h
+-socket.o: socket.c socket.h msg.h
+-socket_cmd.o: socket_cmd.c socket_cmd.h backlight.h display.h msg.h
+-sysfs.o: sysfs.c sysfs.h msg.h
+-time.o: time.c config.h time.h msg.h
+-zaurusd-ctl.o: zaurusd-ctl.c msg.h config.h socket.h socket_cmd.h
+-zaurusd.o: zaurusd.c config.h backlight.h display.h power.h time.h \
+-  pidfile.h socket.h msg.h socket_cmd.h
+diff --git a/Makefile.in b/Makefile.in
+new file mode 100644
+index 0000000..c22b5e6
+--- /dev/null
++++ b/Makefile.in
+@@ -0,0 +1,30 @@
++#
++# Global Makefile
++#
++prefix=@prefix@
++exec_prefix=@exec_prefix@
++libdir=${DESTDIR}@libdir@
++# 
++# make all binaries
++#
++all:
++	make -C src
++
++#
++# clean 
++#
++clean:
++	make -C src clean
++
++distclean: clean
++	rm -r m4
++	rm -r autom4te.cache
++	rm -r aclocal-copy
++	rm configure config.sub config.guess config.status Makefile config.h config.log
++	make -C src distclean
++#
++# install
++#
++install:
++	make -C src install
++
+diff --git a/backlight.c b/backlight.c
+deleted file mode 100644
+index 0cb883c..0000000
+--- a/backlight.c
++++ /dev/null
+@@ -1,71 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include "backlight.h"
+-#include "sysfs.h"
+-#include "config.h"
+-#include "msg.h"
+-
+-int backlight_get(void)
+-{
+-	int ret;
+-
+-	sysfs_read(BACKLIGHT_BRIGHTNESS_SYS, &ret);
+-	
+-	return ret;
+-}
+-
+-void backlight_set(int bl)
+-{
+-	if (bl < BACKLIGHT_MIN || bl > BACKLIGHT_MAX) {
+-		msg_print(MSG_WARN, "backlight value out of bounds (%i)", bl);
+-		return;
+-	}
+-
+-	sysfs_write(BACKLIGHT_BRIGHTNESS_SYS, bl);
+-}
+-
+-void backlight_down(void)
+-{
+-	int bl = backlight_get();
+-
+-	if (bl - 1 > BACKLIGHT_MIN)
+-		backlight_set(bl - 1);
+-}
+-
+-void backlight_up(void)
+-{
+-	int bl = backlight_get();
+-
+-	if (bl < BACKLIGHT_MAX)
+-		backlight_set(bl + 1);
+-}
+-
+-void backlight_on(void)
+-{
+-	sysfs_write(BACKLIGHT_POWER_SYS, 0);
+-}
+-
+-void backlight_off(void)
+-{
+-	sysfs_write(BACKLIGHT_POWER_SYS, 1);
+-}
+diff --git a/backlight.h b/backlight.h
+deleted file mode 100644
+index 1457370..0000000
+--- a/backlight.h
++++ /dev/null
+@@ -1,59 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __BACKLIGHT_H__
+-#define __BACKLIGHT_H__
+-
+-#define BACKLIGHT_MIN 0
+-#define BACKLIGHT_MAX 47
+-
+-/*
+- * Read backlight value from /sys/...
+- */
+-int backlight_get(void);
+-
+-/*
+- * Write backlight value to /sys/...
+- */
+-void backlight_set(int bl);
+-
+-/*
+- * Get backlight value, decrement if possible and set it.
+- */
+-void backlight_down(void);
+-
+-/*
+- * Get backlight value, decrement if possible and set it.
+- */
+-void backlight_up(void);
+-
+-/*
+- * Turns backlight on.
+- */
+-void backlight_on(void);
+-
+-/*
+- * Turn backlight off.
+- */
+-void backlight_off(void);
+-
+-#endif /* __BACKLIGHT_H__ */
+diff --git a/config.h b/config.h
+deleted file mode 100644
+index 73c140c..0000000
+--- a/config.h
++++ /dev/null
+@@ -1,59 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __CONFIG_H__
+-#define __CONFIG_H__
+-
+-/*
+- * Buttons
+- */
+-#define MATRIX_KBD_DEV  "/dev/input/by-path/platform-matrix-keypad-event" 
+-#define GPIO_BTN_DEV    "/dev/input/by-path/platform-gpio-keys-event"
+-
+-/*
+- * Backlight
+- */
+-
+-/* with CONFIG_SYSFS_DEPRECATED*, do not use */
+-//#define BACKLIGHT_SYS   "/sys/devices/platform/pxa2xx-spi.2/spi2.1/backlight:corgi_bl/brightness"
+-/* without CONFIG_SYSFS_DEPRECATED* */
+-//#define BACKLIGHT_SYS   "/sys/devices/platform/pxa2xx-spi.2/spi2.1/backlight/corgi_bl/brightness"
+-
+-#define BACKLIGHT_BRIGHTNESS_SYS   "/sys/class/backlight/corgi_bl/brightness"
+-#define BACKLIGHT_POWER_SYS        "/sys/class/backlight/corgi_bl/bl_power"
+-
+-#define LCD_POWER_SYS              "/sys/class/lcd/corgi_lcd/lcd_power"
+-
+-#define POWER_STATE_SYS "/sys/power/state"
+-#define APM_PROC        "/proc/apm"
+-
+-/*
+- * File to save timestamp to.
+- */
+-#define TIME_ETC        "/etc/zaurusd/zaurus.time"
+-
+-/*
+- * Socket to talk to the daemon to
+- */
+-#define CONTROL_SOCKET  "/var/run/zaurusd.ctl"
+-
+-#endif /* __CONFIG_H__ */
+diff --git a/config.h.in b/config.h.in
+new file mode 100644
+index 0000000..0109199
+--- /dev/null
++++ b/config.h.in
+@@ -0,0 +1,102 @@
++/* config.h.in.  Generated from configure.ac by autoheader.  */
++
++/* Define to 1 if you have the <fcntl.h> header file. */
++#undef HAVE_FCNTL_H
++
++/* Define to 1 if you have the <inttypes.h> header file. */
++#undef HAVE_INTTYPES_H
++
++/* Define to 1 if your system has a GNU libc compatible `malloc' function, and
++   to 0 otherwise. */
++#undef HAVE_MALLOC
++
++/* Define to 1 if you have the `memmove' function. */
++#undef HAVE_MEMMOVE
++
++/* Define to 1 if you have the <memory.h> header file. */
++#undef HAVE_MEMORY_H
++
++/* Define to 1 if you have the `socket' function. */
++#undef HAVE_SOCKET
++
++/* Define to 1 if stdbool.h conforms to C99. */
++#undef HAVE_STDBOOL_H
++
++/* Define to 1 if you have the <stdint.h> header file. */
++#undef HAVE_STDINT_H
++
++/* Define to 1 if you have the <stdlib.h> header file. */
++#undef HAVE_STDLIB_H
++
++/* Define to 1 if you have the `stime' function. */
++#undef HAVE_STIME
++
++/* Define to 1 if you have the `strcasecmp' function. */
++#undef HAVE_STRCASECMP
++
++/* Define to 1 if you have the `strerror' function. */
++#undef HAVE_STRERROR
++
++/* Define to 1 if you have the <strings.h> header file. */
++#undef HAVE_STRINGS_H
++
++/* Define to 1 if you have the <string.h> header file. */
++#undef HAVE_STRING_H
++
++/* Define to 1 if you have the <syslog.h> header file. */
++#undef HAVE_SYSLOG_H
++
++/* Define to 1 if you have the <sys/socket.h> header file. */
++#undef HAVE_SYS_SOCKET_H
++
++/* Define to 1 if you have the <sys/stat.h> header file. */
++#undef HAVE_SYS_STAT_H
++
++/* Define to 1 if you have the <sys/types.h> header file. */
++#undef HAVE_SYS_TYPES_H
++
++/* Define to 1 if you have the <unistd.h> header file. */
++#undef HAVE_UNISTD_H
++
++/* Define to 1 if the system has the type `_Bool'. */
++#undef HAVE__BOOL
++
++/* Define to the address where bug reports for this package should be sent. */
++#undef PACKAGE_BUGREPORT
++
++/* Define to the full name of this package. */
++#undef PACKAGE_NAME
++
++/* Define to the full name and version of this package. */
++#undef PACKAGE_STRING
++
++/* Define to the one symbol short name of this package. */
++#undef PACKAGE_TARNAME
++
++/* Define to the home page for this package. */
++#undef PACKAGE_URL
++
++/* Define to the version of this package. */
++#undef PACKAGE_VERSION
++
++/* Define to 1 if you have the ANSI C header files. */
++#undef STDC_HEADERS
++
++/* Define for Solaris 2.5.1 so the uint8_t typedef from <sys/synch.h>,
++   <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
++   #define below would cause a syntax error. */
++#undef _UINT8_T
++
++/* Define to rpl_malloc if the replacement function should be used. */
++#undef malloc
++
++/* Define to `int' if <sys/types.h> does not define. */
++#undef pid_t
++
++/* Define to the type of an unsigned integer type of width exactly 16 bits if
++   such a type exists and the standard includes do not define it. */
++#undef uint16_t
++
++/* Define to the type of an unsigned integer type of width exactly 8 bits if
++   such a type exists and the standard includes do not define it. */
++#undef uint8_t
+diff --git a/configure.ac b/configure.ac
+new file mode 100644
+index 0000000..e338f4c
+--- /dev/null
++++ b/configure.ac
+@@ -0,0 +1,36 @@
++#                                               -*- Autoconf -*-
++# Process this file with autoconf to produce a configure script.
++
++AC_PREREQ([2.67])
++AC_INIT([zaurusd], [0.1])
++AC_CONFIG_SRCDIR([src/backlight.c])
++AC_CONFIG_HEADERS([config.h])
++
++# Checks for programs.
++AC_PROG_CC
++AC_PROG_INSTALL
++
++# Checks for libraries.
++evfilter=no
++AC_SEARCH_LIBS([evf_io_queue_add], [evfilter], [evfilter=yes])
++AS_IF([test "x$evfilter" != "xyes"], [AC_MSG_ERROR([evfilter library not found.])])
++
++# Checks for header files.
++AC_CHECK_HEADERS([fcntl.h stdint.h stdlib.h string.h sys/socket.h syslog.h unistd.h])
++
++evfilter_h=no
++AC_CHECK_HEADER(evfilter/evfilter.h, [evfilter_h=yes])
++AS_IF([test "x$evfilter_h" != "xyes"], [AC_MSG_ERROR([evfilter.h header not found.])])
++
++# Checks for typedefs, structures, and compiler characteristics.
++AC_HEADER_STDBOOL
++AC_TYPE_PID_T
++AC_TYPE_UINT16_T
++AC_TYPE_UINT8_T
++
++# Checks for library functions.
++AC_FUNC_MALLOC
++AC_CHECK_FUNCS([memmove socket stime strcasecmp strerror])
++
++AC_CONFIG_FILES([Makefile src/Makefile])
++AC_OUTPUT
+diff --git a/display.c b/display.c
+deleted file mode 100644
+index 0904b8e..0000000
+--- a/display.c
++++ /dev/null
+@@ -1,47 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include "display.h"
+-#include "lcd.h"
+-#include "backlight.h"
+-
+-static bool saved_state = true;
+-
+-void display_on(void)
+-{
+-	saved_state = true;
+-	lcd_on();
+-	backlight_on();
+-}
+-
+-void display_off(void)
+-{
+-	saved_state = false;
+-	backlight_off();
+-	lcd_off();
+-}
+-
+-bool display_state(void)
+-{
+-	return saved_state;
+-}
+-
+diff --git a/display.h b/display.h
+deleted file mode 100644
+index f3ab331..0000000
+--- a/display.h
++++ /dev/null
+@@ -1,50 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-/*
+- 
+- Display is an abstraction to the actual display so dispaly_off() could turn
+- off both display backlight and the display itself to spare energy.
+-
+- */
+-
+-#ifndef __DISPLAY_H__
+-#define __DISPLAY_H__
+-
+-#include <stdbool.h>
+-
+-/*
+- * Turns Display on.
+- */
+-void display_on(void);
+-
+-/*
+- * Turn Display off.
+- */
+-void display_off(void);
+-
+-/*
+- * Returns in which state we left display.
+- */
+-bool display_state(void);
+-
+-#endif /* __DISPLAY_H__ */
+diff --git a/install-sh b/install-sh
+new file mode 100644
+index 0000000..acbc962
+--- /dev/null
++++ b/install-sh
+@@ -0,0 +1 @@
++fake
+diff --git a/lcd.c b/lcd.c
+deleted file mode 100644
+index c6e59a4..0000000
+--- a/lcd.c
++++ /dev/null
+@@ -1,35 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include "lcd.h"
+-#include "sysfs.h"
+-#include "config.h"
+-
+-void lcd_on(void)
+-{
+-	sysfs_write(LCD_POWER_SYS, 0);
+-}
+-
+-void lcd_off(void)
+-{
+-	sysfs_write(LCD_POWER_SYS, 1);
+-}
+diff --git a/lcd.h b/lcd.h
+deleted file mode 100644
+index 7dc621b..0000000
+--- a/lcd.h
++++ /dev/null
+@@ -1,36 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __LCD_H__
+-#define __LCD_H__
+-
+-/*
+- * Turns LCD on.
+- */
+-void lcd_on(void);
+-
+-/*
+- * Turn LCD off.
+- */
+-void lcd_off(void);
+-
+-#endif /* __LCD_H__ */
+diff --git a/msg.c b/msg.c
+deleted file mode 100644
+index 2fa08f4..0000000
+--- a/msg.c
++++ /dev/null
+@@ -1,84 +0,0 @@
+-/*****************************************************************************
+- * This is simple zaurusd for handling suspend and backlight via keys.       *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <stdarg.h>
+-#include <stdio.h>
+-#include <errno.h>
+-#include <string.h>
+-#include <syslog.h>
+-
+-#include "msg.h"
+-
+-static char *msg_types[] = {"ERROR", "WARN ", "DEBUG"};
+-static int   msg_levels[] = {LOG_ERR, LOG_WARNING, LOG_DEBUG};
+-static enum msg_output curr_output = MSG_STDERR;
+-
+-static const char *process_name = "";
+-
+-void msg_set_output(enum msg_output output)
+-{
+-	switch (output) {
+-		case MSG_STDERR:
+-			curr_output = MSG_STDERR;
+-		break;
+-		case MSG_SYSLOG:
+-			curr_output = MSG_SYSLOG;
+-		break;
+-	}
+-}
+-
+-static void msg_stderr(enum msg_type type, const char *format, va_list list)
+-{
+-	fprintf(stderr, "%s%s: ", process_name, msg_types[type]);
+-	vfprintf(stderr, format, list);
+-	fprintf(stderr, "\n");
+-}
+-
+-static void msg_syslog(enum msg_type type, const char *format, va_list list)
+-{
+-	openlog(process_name, LOG_PID, LOG_DAEMON);
+-	vsyslog(msg_levels[type], format, list);
+-	closelog();
+-}
+-
+-void msg_set_name(const char *name)
+-{
+-	process_name = name;
+-}
+-
+-void msg_print(enum msg_type type, const char *format, ...) 
+-{
+-	va_list list;
+-	
+-	switch (curr_output) {
+-		case MSG_STDERR:
+-			va_start(list, format);
+-			msg_stderr(type, format, list);
+-			va_end(list);
+-		break;
+-		case MSG_SYSLOG:
+-			va_start(list, format);
+-			msg_syslog(type, format, list);
+-			va_end(list);
+-		break;
+-	}
+-}
+diff --git a/msg.h b/msg.h
+deleted file mode 100644
+index 4fbbd00..0000000
+--- a/msg.h
++++ /dev/null
+@@ -1,67 +0,0 @@
+-/*****************************************************************************
+- * This is simple zaurusd for handling suspend and backlight via keys.       *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-/*
+-  
+-  General debug/error printing functionality.
+-
+-  Messages will look like:
+-
+-  process_name: ERROR: your message\n
+-  process_name: WARN : your message\n
+-  ...
+-
+- */
+-
+-#ifndef __MSG_H__
+-#define __MSG_H__
+-
+-enum msg_type {
+-	MSG_ERR,
+-	MSG_WARN,
+-	MSG_DBG,
+-};
+-
+-enum msg_output {
+-	MSG_STDERR,
+-	MSG_SYSLOG,
+-};
+-
+-/*
+- * Print message.
+- */
+-void msg_print(enum msg_type type, const char *format, ...) 
+-      __attribute__ ((format(printf, 2, 3)));
+-
+-/*
+- * Set process name. Should be called before any msg_print() call. The string
+- * is not copied and must stay valid trought program run.
+- */
+-void msg_set_name(const char *name);
+-
+-/*
+- * Redirects messages to some output. Useful for daemons that doesn't have
+- * stderr.
+- */
+-void msg_set_output(enum msg_output output);
+-
+-#endif /* __MSG_H__ */
+diff --git a/pidfile.c b/pidfile.c
+deleted file mode 100644
+index 522cc56..0000000
+--- a/pidfile.c
++++ /dev/null
+@@ -1,168 +0,0 @@
+-/*****************************************************************************
+- * This is simple zaurusd for handling suspend and backlight via keys.       *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <sys/types.h>
+-#include <sys/stat.h>
+-#include <unistd.h>
+-#include <errno.h>
+-#include <string.h>
+-#include <stdio.h>
+-
+-#include "pidfile.h"
+-#include "msg.h"
+-
+-#define PIDFILE "/var/run/zaurusd.pid"
+-
+-/*
+- * Load process name from /proc/<PID>/status
+- */
+-static int get_process_name(pid_t pid, char *buf)
+-{
+-	char path[128];
+-	FILE *f;
+-
+-	snprintf(path, 128, "/proc/%i/status", pid);
+-
+-	f = fopen(path, "r");
+-
+-	if (f == NULL) {
+-		msg_print(MSG_ERR, "Cannot open %s: %s", path, strerror(errno));
+-		return 1;
+-	}
+-
+-	if (fscanf(f, "Name:   %128s", buf) <= 0) {
+-		msg_print(MSG_ERR, "Cannot read %s: %s", path, strerror(errno));
+-		return 1;
+-	}
+-
+-	return 0; 
+-}
+-
+-/*
+- * Checks if there is process with <PID> and the same name.
+- */
+-static int pid_is_running(pid_t pid)
+-{
+-	char path[128];
+-	char pname[128];
+-	char myname[128];
+-	struct stat buf;
+-
+-	snprintf(path, 128, "/proc/%i", pid);
+-
+-	/* no running process for pid */
+-	if (stat(path, &buf) == -1)
+-		return 0;
+-	
+-	/* load process name for us and process with <PID> */
+-	if (get_process_name(pid, pname) || get_process_name(getpid(), myname))
+-		return 0;
+-
+-	/* process name is different */
+-	if (strcmp(myname, pname))
+-		return 0;
+-
+-	return 1;
+-}
+-
+-int pid_save(void)
+-{
+-	FILE *f;
+-	pid_t pid;
+-	int i;
+-	
+-	/*
+-	 * If there is a pidfile, look for running process with that pid and
+-	 * same name.
+-	 */
+-	if (pid_load(&pid) && pid_is_running(pid)) {
+-		char pname[128];
+-		get_process_name(getpid(), pname);
+-		msg_print(MSG_ERR, "There is a already process `%s' running "
+-		          "with a pid %i", pname, pid);
+-		return 1;
+-	}
+-	
+-	/*
+-	 * Save the pid into PIDFILE
+-	 */
+-	f = fopen(PIDFILE, "w");
+-
+-	if (f == NULL) {
+-		msg_print(MSG_ERR, "Can't open pidfile %s: %s",
+-		          PIDFILE, strerror(errno));
+-		return 1;
+-	}
+-
+-	i =  getpid();
+-
+-	if (fprintf(f, "%i\n", i) <= 0) {
+-		msg_print(MSG_ERR, "fprintf into pidfile %s has failed",
+-		          PIDFILE);
+-		fclose(f);
+-		return 1;
+-	}
+-
+-	if (fclose(f) != 0) {
+-		msg_print(MSG_ERR, "fclose on pidfile %s has failed: %s",
+-		          PIDFILE, strerror(errno));
+-		return 1;
+-	}
+-
+-	return 0;
+-}
+-
+-int pid_load(pid_t *pid)
+-{
+-	FILE *f = fopen(PIDFILE, "r");
+-	int i;
+-
+-	if (f == NULL) {
+-		if (errno != ENOENT)
+-			msg_print(MSG_ERR, "Can't open pidfile %s: %s",
+-			          PIDFILE, strerror(errno));
+-		return 0;
+-	}
+-
+-	if (fscanf(f, "%i", &i) != 1) {
+-		msg_print(MSG_ERR, "Invalid pidfile format.");
+-		return 0;
+-	}
+-
+-	*pid = i;
+-	return 1;
+-}
+-
+-int pid_erase(void)
+-{
+-	if (unlink(PIDFILE) == -1) {
+-		if (errno == ENOENT)
+-			return 0;
+-
+-		msg_print(MSG_ERR, "Can't remove pidfile %s: %s", 
+-		          PIDFILE, strerror(errno));
+-		
+-		return 1;
+-	}
+-
+-	return 0;
+-}
+diff --git a/pidfile.h b/pidfile.h
+deleted file mode 100644
+index 64b8a82..0000000
+--- a/pidfile.h
++++ /dev/null
+@@ -1,54 +0,0 @@
+-/*****************************************************************************
+- * This is simple zaurusd for handling suspend and backlight via keys.       *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __PIDFILE_H__
+-#define __PIDFILE_H__
+-
+-#include <sys/types.h>
+-#include <unistd.h>
+-
+-/*
+- * Save pid to pidfile.
+- *
+- * Returns 1 if there is allready pidfile and process 
+- * running with pid in this pidfile or if pidfile 
+- * cannot be written.
+- *
+- * Returns 0 if writing pid into pidfile was successful.
+- */
+-int pid_save(void);
+-
+-/*
+- * Loads pid from pidfile.
+- *
+- * Returns 0 if there is no pidfile or the content is invalid.
+- */
+-int pid_load(pid_t *pid);
+-
+-/*
+- * Remove pidfile.
+- *
+- * Returns 0 if the file was erased.
+- */
+-int pid_erase(void);
+-
+-#endif /* __PIDFILE_H__ */
+diff --git a/power.c b/power.c
+deleted file mode 100644
+index 747dfca..0000000
+--- a/power.c
++++ /dev/null
+@@ -1,86 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <stdio.h>
+-#include <errno.h>
+-#include <string.h>
+-
+-#include "config.h"
+-#include "backlight.h"
+-#include "display.h"
+-#include "power.h"
+-#include "msg.h"
+-
+-void power_suspend(void)
+-{
+-	FILE *f = fopen(POWER_STATE_SYS, "w");
+-	
+-	/* So that user can see kernel messages when something goes wrong,
+-	 * and so that user sees machine resuming -- and kernel messages if
+-	 * it goes wrong. */
+-	display_on();
+-	if (backlight_get() == 0)
+-		backlight_set(1);
+-
+-	if (f == NULL) {
+-		msg_print(MSG_ERR, "%s: %s", POWER_STATE_SYS, strerror(errno));
+-		return;
+-	}
+-
+-	fprintf(f, "mem");
+-	fclose(f);
+-}
+-
+-/* 
+- * We parse apm emulation proc interface, content of the file is following:
+- *
+- * driver-version
+- * bios-version
+- * apm-flags
+- * ac-line-status: { 0x00 - off, 0x01 - on }
+- * battery-status
+- * battery-flags
+- * battery-percentage
+- * ...
+- *
+- * for details see include/linux/apm-emulation.h and friends.
+- */
+-int power_on_ac(void)
+-{
+-	FILE *f = fopen(APM_PROC, "r");
+-	int dvu, dvl, bvu, bvl;
+-	unsigned int apmf, acls;
+-
+-	if (f == NULL) {
+-		msg_print(MSG_ERR, "%s: %s", APM_PROC, strerror(errno));
+-		return -1;
+-	}
+-	
+-	fscanf(f, "%i.%i %i.%i %x %x", &dvu, &dvl, &bvu, &bvl, &apmf, &acls);
+-
+-	//printf("driver: %i.%i apm: %x on ac %x\n", dvu, dvl, apmf, acls);
+-
+-	if (acls == 0x01)
+-		return 1;
+-
+-	return 0;
+-}
+diff --git a/power.h b/power.h
+deleted file mode 100644
+index b3d3071..0000000
+--- a/power.h
++++ /dev/null
+@@ -1,36 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __POWER_H__
+-#define __POWER_H__
+-
+-/*
+- * Causes suspend to memory.
+- */
+-void power_suspend(void);
+-
+-/*
+- * Returns true if we are on ac power.
+- */
+-int power_on_ac(void);
+-
+-#endif /* __POWER_H__ */
+diff --git a/socket.c b/socket.c
+deleted file mode 100644
+index 39efc5c..0000000
+--- a/socket.c
++++ /dev/null
+@@ -1,106 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <sys/socket.h>
+-#include <sys/un.h>
+-#include <unistd.h>
+-#include <errno.h>
+-#include <string.h>
+-#include "socket.h"
+-#include "msg.h"
+-
+-#define UNIX_PATH_MAX 108
+-
+-int socket_create(const char *path)
+-{
+-	int fd;
+-	struct sockaddr_un sockaddr;
+-
+-	/* delete old unix socket */
+-	if (unlink(path) == -1 && errno != ENOENT) {
+-		msg_print(MSG_WARN, "unlink: %s failed: %s", path, strerror(errno));
+-		return -1;
+-	}
+-
+-	/* create new socket */
+-	if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+-		msg_print(MSG_WARN, "socket: %s failed: %s", path, strerror(errno));
+-		return -1;
+-	}
+-
+-	sockaddr.sun_family = AF_UNIX;
+-        strncpy(sockaddr.sun_path, path, UNIX_PATH_MAX);
+-       	sockaddr.sun_path[UNIX_PATH_MAX - 1] = '\0';
+-
+-	/* bind named socket with fd */
+-	if (bind(fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) == -1) {
+-		msg_print(MSG_WARN, "bind failed: %s", strerror(errno));
+-		close(fd);
+-		return -1;
+-	}
+-
+-	/* start listening on that socket */
+-        if (listen(fd, 5) == -1) {
+-		msg_print(MSG_WARN, "listen failed: %s", strerror(errno));
+-		close(fd);
+-		return -1;
+-	}
+-
+-	return fd;
+-}
+-
+-int socket_open(const char *path)
+-{
+-	int fd;
+-	struct sockaddr_un sockaddr;
+-	
+-	/* create new socket */
+-	if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+-		msg_print(MSG_WARN, "socket: %s failed: %s", path, strerror(errno));
+-		return -1;
+-	}
+-
+-	sockaddr.sun_family = AF_UNIX;
+-        strncpy(sockaddr.sun_path, path, UNIX_PATH_MAX);
+-      	
+-	/* connect to socket */
+-	if (connect(fd, (struct sockaddr *) &sockaddr, sizeof(sockaddr)) == -1) {
+-		msg_print(MSG_WARN, "connect: %s failed: %s", path, strerror(errno));
+-		close(fd);
+-		return -1;
+-	}
+-
+-	return fd;
+-}
+-
+-int socket_client(int fd)
+-{
+-	int cli_fd;
+-
+-	/* extract connection request from server fd */
+-	if ((cli_fd = accept(fd, NULL, NULL)) == -1) {
+-		msg_print(MSG_WARN, "accept failed (fd %i): %s", fd, strerror(errno));
+-		return -1;
+-	}
+-
+-	return cli_fd;
+-}
+diff --git a/socket.h b/socket.h
+deleted file mode 100644
+index c991550..0000000
+--- a/socket.h
++++ /dev/null
+@@ -1,41 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __SOCKET_H__
+-#define __SOCKET_H__
+-
+-/*
+- * Create named socket and return file descriptor.
+- */
+-int socket_create(const char *path);
+-
+-/*
+- * Opens socket and returns file descriptor.
+- */
+-int socket_open(const char *path);
+-
+-/*
+- * Read from server fd, return client fd.
+- */
+-int socket_client(int fd);
+-
+-#endif /* __SOCKET_H__ */
+diff --git a/socket_cmd.c b/socket_cmd.c
+deleted file mode 100644
+index b0702c9..0000000
+--- a/socket_cmd.c
++++ /dev/null
+@@ -1,131 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <stdio.h>
+-
+-#include "socket_cmd.h"
+-#include "backlight.h"
+-#include "display.h"
+-#include "msg.h"
+-
+-const char *scmd_name[] = {
+-	"exit",
+-	"suspend_on_ac_on",
+-	"suspend_on_ac_off",
+-	"suspend_timeout",
+-	"backlight_on",
+-	"backlight_off",
+-	"backlight_off_timeout",
+-	"backlight_set",
+-	"backlight_get",
+-
+-};
+-
+-const char *scmd_desc[] = {
+-	"exit the daemon",
+-	"enable suspend on ac",
+-	"disable suspend on ac",
+-	"set suspend timeout",
+-	"turn backlight on",
+-	"turn backlight off",
+-	"set backlight timeout",
+-	"set backlight brightness",
+-	"get backlight brightness",
+-};
+-
+-void dump_buf(char *buf, int len)
+-{
+-	int i;
+-
+-	for (i = 0; i < len; i++)
+-		printf("0x%.2x ", buf[i]);
+-
+-	printf("\n");
+-}
+-
+-
+-int scmd_update(char *buf, int len, struct scmd_config *config)
+-{
+-	int pos = 0;
+-
+-	dump_buf(buf, len);
+-
+-	for (;;) {
+-	
+-		/* find start byte */
+-		while (buf[pos] != SCMD_START && pos < len)
+-			pos++;
+-		
+-		if (pos >= len)
+-			return len - 1;
+-
+-		/* parse commands */
+-		switch (buf[++pos]) {
+-			case SCMD_EXIT:
+-				return -1;
+-			break;
+-			case SCMD_SUSPEND_ON_AC_ON:
+-				config->suspend_on_ac = 1;
+-			break;
+-			case SCMD_SUSPEND_ON_AC_OFF:
+-				config->suspend_on_ac = 0;
+-			break;
+-			case SCMD_SUSPEND_ON_BAT_ON:
+-				config->suspend_on_bat = 1;
+-			break;
+-			case SCMD_SUSPEND_ON_BAT_OFF:
+-				config->suspend_on_bat = 0;
+-			break;
+-			case SCMD_SUSPEND_TIMEOUT:
+-				if (pos + 2 >= len)
+-					return pos - 1;
+-				
+-				config->suspend_timeout = *(uint16_t*)(buf+pos+1);
+-				printf("timeout %u\n", config->suspend_timeout);
+-			break;
+-			case SCMD_BACKLIGHT_OFF:
+-				display_off();
+-			break;
+-			case SCMD_BACKLIGHT_ON:
+-				display_on();
+-			break;
+-			case SCMD_BACKLIGHT_OFF_TIMEOUT:
+-				if (pos + 2 >= len)
+-					return pos - 1;
+-				
+-			break;
+-			case SCMD_BACKLIGHT_GET:
+-				//
+-			break;
+-			case SCMD_BACKLIGHT_SET:
+-				if (pos + 1 >= len)
+-					return pos - 1;
+-				backlight_set(buf[pos+1]);
+-			break;
+-			default:
+-				msg_print(MSG_WARN, "invalid command from zaurusd-ctl, closing connection...");
+-				return -1;
+-		}
+-	}
+-
+-	return pos - 1;
+-}
+diff --git a/socket_cmd.h b/socket_cmd.h
+deleted file mode 100644
+index 9c01ed9..0000000
+--- a/socket_cmd.h
++++ /dev/null
+@@ -1,69 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __SOCKET_CMD_H__
+-#define __SOCKET_CMD_H__
+-
+-#include <stdint.h>
+-
+-/* synchro byte */
+-#define SCMD_START                 0x42
+-
+-/* commands */
+-#define SCMD_EXIT                  0x00 /* end of communication */
+-#define SCMD_SUSPEND_ON_AC_ON      0x01
+-#define SCMD_SUSPEND_ON_AC_OFF     0x02
+-
+-#define SCMD_SUSPEND_ON_BAT_ON     0x03
+-#define SCMD_SUSPEND_ON_BAT_OFF    0x04
+-
+-#define SCMD_SUSPEND_TIMEOUT       0x05 /* followed by two bytes value in seconds */
+-
+-#define SCMD_BACKLIGHT_OFF         0x06
+-#define SCMD_BACKLIGHT_ON          0x07
+-#define SCMD_BACKLIGHT_OFF_TIMEOUT 0x08 /* followed by two bytes value in seconds */
+-
+-#define SCMD_BACKLIGHT_SET         0x09 /* followed by byte */
+-#define SCMD_BACKLIGHT_GET         0x0a /* followed by byte */
+-
+-#define SCMD_CNT (SCMD_BACKLIGHT_GET + 1) /* last command + 1 */
+-
+-/* commands description */
+-extern const char *scmd_name[];
+-extern const char *scmd_desc[];
+-
+-/* zaurusd state */
+-struct scmd_config {
+-	int suspend_on_ac;
+-	int suspend_on_bat;
+-
+-	uint16_t suspend_timeout;
+-	uint16_t backlight_timeout;
+-};
+-
+-/*
+- * Handle connection and update state and returns nuber of
+- * processed chars from buf. In case SCMD_EXIT was found, returns -1.
+- */
+-int scmd_update(char *buf, int len, struct scmd_config *config);
+-
+-#endif /* __SOCKET_CMD_H__ */
+diff --git a/src/Makefile.in b/src/Makefile.in
+new file mode 100644
+index 0000000..4c97d6d
+--- /dev/null
++++ b/src/Makefile.in
+@@ -0,0 +1,58 @@
++CC = @CC@
++CFLAGS = @CFLAGS@
++LDFLAGS = @LDFLAGS@
++LIBS = @LIBS@
++prefix = @prefix@
++exec_prefix = ${prefix}
++bindir = ${DESTDIR}@bindir@
++sbindir = ${DESTDIR}@sbindir@
++sysconfdir = ${DESTDIR}@sysconfdir@
++
++OBJECTS=pidfile.o backlight.o power.o time.o zaurusd.o msg.o\
++        socket.o socket_cmd.o lcd.o sysfs.o display.o
++
++CTL_OBJECTS=zaurusd-ctl.o msg.o socket.o
++
++all: zaurusd zaurusd-ctl
++
++zaurusd: $(OBJECTS)
++	${CC} $^ ${LDFLAGS} ${LIBS} -o zaurusd
++
++zaurusd-ctl: $(CTL_OBJECTS)
++	${CC} $^ ${LDFLAGS} ${LIBS} -o zaurusd-ctl
++
++%.o:%.c
++	${CC} ${CFLAGS} -c $< -o $@
++
++clean:
++	rm -f zaurusd zaurusd-ctl $(OBJECTS) $(CTL_OBJECTS)
++
++distclean: clean
++	rm Makefile
++
++install:
++	install -d ${sbindir}
++	install -d ${bindir}
++	install -d ${sysconfdir}/init.d
++	install -m 775 zaurusd ${sbindir} 
++	install -m 775 zaurusd-ctl ${bindir}
++	install -m 775 ../debian/zaurusd ${sysconfdir}/init.d 
++
++install_debian: install
++	install -m 775 debian/zaurusd /etc/init.d/zaurusd
++	#create init symlinks
++	update-rc.d zaurusd defaults
++
++backlight.o: backlight.c backlight.h sysfs.h config.h msg.h
++display.o: display.c display.h lcd.h backlight.h
++lcd.o: lcd.c lcd.h sysfs.h config.h
++msg.o: msg.c msg.h
++pidfile.o: pidfile.c pidfile.h msg.h
++power.o: power.c config.h backlight.h power.h msg.h
++socket.o: socket.c socket.h msg.h
++socket_cmd.o: socket_cmd.c socket_cmd.h backlight.h display.h msg.h
++sysfs.o: sysfs.c sysfs.h msg.h
++time.o: time.c config.h time.h msg.h
++zaurusd-ctl.o: zaurusd-ctl.c msg.h config.h socket.h socket_cmd.h
++zaurusd.o: zaurusd.c config.h backlight.h display.h power.h time.h \
++  pidfile.h socket.h msg.h socket_cmd.h
+diff --git a/src/backlight.c b/src/backlight.c
+new file mode 100644
+index 0000000..0cb883c
+--- /dev/null
++++ b/src/backlight.c
+@@ -0,0 +1,71 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include "backlight.h"
++#include "sysfs.h"
++#include "config.h"
++#include "msg.h"
++
++int backlight_get(void)
++{
++	int ret;
++
++	sysfs_read(BACKLIGHT_BRIGHTNESS_SYS, &ret);
++	
++	return ret;
++}
++
++void backlight_set(int bl)
++{
++	if (bl < BACKLIGHT_MIN || bl > BACKLIGHT_MAX) {
++		msg_print(MSG_WARN, "backlight value out of bounds (%i)", bl);
++		return;
++	}
++
++	sysfs_write(BACKLIGHT_BRIGHTNESS_SYS, bl);
++}
++
++void backlight_down(void)
++{
++	int bl = backlight_get();
++
++	if (bl - 1 > BACKLIGHT_MIN)
++		backlight_set(bl - 1);
++}
++
++void backlight_up(void)
++{
++	int bl = backlight_get();
++
++	if (bl < BACKLIGHT_MAX)
++		backlight_set(bl + 1);
++}
++
++void backlight_on(void)
++{
++	sysfs_write(BACKLIGHT_POWER_SYS, 0);
++}
++
++void backlight_off(void)
++{
++	sysfs_write(BACKLIGHT_POWER_SYS, 1);
++}
+diff --git a/src/backlight.h b/src/backlight.h
+new file mode 100644
+index 0000000..1457370
+--- /dev/null
++++ b/src/backlight.h
+@@ -0,0 +1,59 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __BACKLIGHT_H__
++#define __BACKLIGHT_H__
++
++#define BACKLIGHT_MIN 0
++#define BACKLIGHT_MAX 47
++
++/*
++ * Read backlight value from /sys/...
++ */
++int backlight_get(void);
++
++/*
++ * Write backlight value to /sys/...
++ */
++void backlight_set(int bl);
++
++/*
++ * Get backlight value, decrement if possible and set it.
++ */
++void backlight_down(void);
++
++/*
++ * Get backlight value, decrement if possible and set it.
++ */
++void backlight_up(void);
++
++/*
++ * Turns backlight on.
++ */
++void backlight_on(void);
++
++/*
++ * Turn backlight off.
++ */
++void backlight_off(void);
++
++#endif /* __BACKLIGHT_H__ */
+diff --git a/src/config.h b/src/config.h
+new file mode 100644
+index 0000000..73c140c
+--- /dev/null
++++ b/src/config.h
+@@ -0,0 +1,59 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __CONFIG_H__
++#define __CONFIG_H__
++
++/*
++ * Buttons
++ */
++#define MATRIX_KBD_DEV  "/dev/input/by-path/platform-matrix-keypad-event" 
++#define GPIO_BTN_DEV    "/dev/input/by-path/platform-gpio-keys-event"
++
++/*
++ * Backlight
++ */
++
++/* with CONFIG_SYSFS_DEPRECATED*, do not use */
++//#define BACKLIGHT_SYS   "/sys/devices/platform/pxa2xx-spi.2/spi2.1/backlight:corgi_bl/brightness"
++/* without CONFIG_SYSFS_DEPRECATED* */
++//#define BACKLIGHT_SYS   "/sys/devices/platform/pxa2xx-spi.2/spi2.1/backlight/corgi_bl/brightness"
++
++#define BACKLIGHT_BRIGHTNESS_SYS   "/sys/class/backlight/corgi_bl/brightness"
++#define BACKLIGHT_POWER_SYS        "/sys/class/backlight/corgi_bl/bl_power"
++
++#define LCD_POWER_SYS              "/sys/class/lcd/corgi_lcd/lcd_power"
++
++#define POWER_STATE_SYS "/sys/power/state"
++#define APM_PROC        "/proc/apm"
++
++/*
++ * File to save timestamp to.
++ */
++#define TIME_ETC        "/etc/zaurusd/zaurus.time"
++
++/*
++ * Socket to talk to the daemon to
++ */
++#define CONTROL_SOCKET  "/var/run/zaurusd.ctl"
++
++#endif /* __CONFIG_H__ */
+diff --git a/src/display.c b/src/display.c
+new file mode 100644
+index 0000000..0904b8e
+--- /dev/null
++++ b/src/display.c
+@@ -0,0 +1,47 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include "display.h"
++#include "lcd.h"
++#include "backlight.h"
++
++static bool saved_state = true;
++
++void display_on(void)
++{
++	saved_state = true;
++	lcd_on();
++	backlight_on();
++}
++
++void display_off(void)
++{
++	saved_state = false;
++	backlight_off();
++	lcd_off();
++}
++
++bool display_state(void)
++{
++	return saved_state;
++}
++
+diff --git a/src/display.h b/src/display.h
+new file mode 100644
+index 0000000..f3ab331
+--- /dev/null
++++ b/src/display.h
+@@ -0,0 +1,50 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++/*
++ 
++ Display is an abstraction to the actual display so dispaly_off() could turn
++ off both display backlight and the display itself to spare energy.
++
++ */
++
++#ifndef __DISPLAY_H__
++#define __DISPLAY_H__
++
++#include <stdbool.h>
++
++/*
++ * Turns Display on.
++ */
++void display_on(void);
++
++/*
++ * Turn Display off.
++ */
++void display_off(void);
++
++/*
++ * Returns in which state we left display.
++ */
++bool display_state(void);
++
++#endif /* __DISPLAY_H__ */
+diff --git a/src/lcd.c b/src/lcd.c
+new file mode 100644
+index 0000000..c6e59a4
+--- /dev/null
++++ b/src/lcd.c
+@@ -0,0 +1,35 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include "lcd.h"
++#include "sysfs.h"
++#include "config.h"
++
++void lcd_on(void)
++{
++	sysfs_write(LCD_POWER_SYS, 0);
++}
++
++void lcd_off(void)
++{
++	sysfs_write(LCD_POWER_SYS, 1);
++}
+diff --git a/src/lcd.h b/src/lcd.h
+new file mode 100644
+index 0000000..7dc621b
+--- /dev/null
++++ b/src/lcd.h
+@@ -0,0 +1,36 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __LCD_H__
++#define __LCD_H__
++
++/*
++ * Turns LCD on.
++ */
++void lcd_on(void);
++
++/*
++ * Turn LCD off.
++ */
++void lcd_off(void);
++
++#endif /* __LCD_H__ */
+diff --git a/src/msg.c b/src/msg.c
+new file mode 100644
+index 0000000..2fa08f4
+--- /dev/null
++++ b/src/msg.c
+@@ -0,0 +1,84 @@
++/*****************************************************************************
++ * This is simple zaurusd for handling suspend and backlight via keys.       *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <stdarg.h>
++#include <stdio.h>
++#include <errno.h>
++#include <string.h>
++#include <syslog.h>
++
++#include "msg.h"
++
++static char *msg_types[] = {"ERROR", "WARN ", "DEBUG"};
++static int   msg_levels[] = {LOG_ERR, LOG_WARNING, LOG_DEBUG};
++static enum msg_output curr_output = MSG_STDERR;
++
++static const char *process_name = "";
++
++void msg_set_output(enum msg_output output)
++{
++	switch (output) {
++		case MSG_STDERR:
++			curr_output = MSG_STDERR;
++		break;
++		case MSG_SYSLOG:
++			curr_output = MSG_SYSLOG;
++		break;
++	}
++}
++
++static void msg_stderr(enum msg_type type, const char *format, va_list list)
++{
++	fprintf(stderr, "%s%s: ", process_name, msg_types[type]);
++	vfprintf(stderr, format, list);
++	fprintf(stderr, "\n");
++}
++
++static void msg_syslog(enum msg_type type, const char *format, va_list list)
++{
++	openlog(process_name, LOG_PID, LOG_DAEMON);
++	vsyslog(msg_levels[type], format, list);
++	closelog();
++}
++
++void msg_set_name(const char *name)
++{
++	process_name = name;
++}
++
++void msg_print(enum msg_type type, const char *format, ...) 
++{
++	va_list list;
++	
++	switch (curr_output) {
++		case MSG_STDERR:
++			va_start(list, format);
++			msg_stderr(type, format, list);
++			va_end(list);
++		break;
++		case MSG_SYSLOG:
++			va_start(list, format);
++			msg_syslog(type, format, list);
++			va_end(list);
++		break;
++	}
++}
+diff --git a/src/msg.h b/src/msg.h
+new file mode 100644
+index 0000000..4fbbd00
+--- /dev/null
++++ b/src/msg.h
+@@ -0,0 +1,67 @@
++/*****************************************************************************
++ * This is simple zaurusd for handling suspend and backlight via keys.       *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++/*
++  
++  General debug/error printing functionality.
++
++  Messages will look like:
++
++  process_name: ERROR: your message\n
++  process_name: WARN : your message\n
++  ...
++
++ */
++
++#ifndef __MSG_H__
++#define __MSG_H__
++
++enum msg_type {
++	MSG_ERR,
++	MSG_WARN,
++	MSG_DBG,
++};
++
++enum msg_output {
++	MSG_STDERR,
++	MSG_SYSLOG,
++};
++
++/*
++ * Print message.
++ */
++void msg_print(enum msg_type type, const char *format, ...) 
++      __attribute__ ((format(printf, 2, 3)));
++
++/*
++ * Set process name. Should be called before any msg_print() call. The string
++ * is not copied and must stay valid trought program run.
++ */
++void msg_set_name(const char *name);
++
++/*
++ * Redirects messages to some output. Useful for daemons that doesn't have
++ * stderr.
++ */
++void msg_set_output(enum msg_output output);
++
++#endif /* __MSG_H__ */
+diff --git a/src/pidfile.c b/src/pidfile.c
+new file mode 100644
+index 0000000..522cc56
+--- /dev/null
++++ b/src/pidfile.c
+@@ -0,0 +1,168 @@
++/*****************************************************************************
++ * This is simple zaurusd for handling suspend and backlight via keys.       *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <unistd.h>
++#include <errno.h>
++#include <string.h>
++#include <stdio.h>
++
++#include "pidfile.h"
++#include "msg.h"
++
++#define PIDFILE "/var/run/zaurusd.pid"
++
++/*
++ * Load process name from /proc/<PID>/status
++ */
++static int get_process_name(pid_t pid, char *buf)
++{
++	char path[128];
++	FILE *f;
++
++	snprintf(path, 128, "/proc/%i/status", pid);
++
++	f = fopen(path, "r");
++
++	if (f == NULL) {
++		msg_print(MSG_ERR, "Cannot open %s: %s", path, strerror(errno));
++		return 1;
++	}
++
++	if (fscanf(f, "Name:   %128s", buf) <= 0) {
++		msg_print(MSG_ERR, "Cannot read %s: %s", path, strerror(errno));
++		return 1;
++	}
++
++	return 0; 
++}
++
++/*
++ * Checks if there is process with <PID> and the same name.
++ */
++static int pid_is_running(pid_t pid)
++{
++	char path[128];
++	char pname[128];
++	char myname[128];
++	struct stat buf;
++
++	snprintf(path, 128, "/proc/%i", pid);
++
++	/* no running process for pid */
++	if (stat(path, &buf) == -1)
++		return 0;
++	
++	/* load process name for us and process with <PID> */
++	if (get_process_name(pid, pname) || get_process_name(getpid(), myname))
++		return 0;
++
++	/* process name is different */
++	if (strcmp(myname, pname))
++		return 0;
++
++	return 1;
++}
++
++int pid_save(void)
++{
++	FILE *f;
++	pid_t pid;
++	int i;
++	
++	/*
++	 * If there is a pidfile, look for running process with that pid and
++	 * same name.
++	 */
++	if (pid_load(&pid) && pid_is_running(pid)) {
++		char pname[128];
++		get_process_name(getpid(), pname);
++		msg_print(MSG_ERR, "There is a already process `%s' running "
++		          "with a pid %i", pname, pid);
++		return 1;
++	}
++	
++	/*
++	 * Save the pid into PIDFILE
++	 */
++	f = fopen(PIDFILE, "w");
++
++	if (f == NULL) {
++		msg_print(MSG_ERR, "Can't open pidfile %s: %s",
++		          PIDFILE, strerror(errno));
++		return 1;
++	}
++
++	i =  getpid();
++
++	if (fprintf(f, "%i\n", i) <= 0) {
++		msg_print(MSG_ERR, "fprintf into pidfile %s has failed",
++		          PIDFILE);
++		fclose(f);
++		return 1;
++	}
++
++	if (fclose(f) != 0) {
++		msg_print(MSG_ERR, "fclose on pidfile %s has failed: %s",
++		          PIDFILE, strerror(errno));
++		return 1;
++	}
++
++	return 0;
++}
++
++int pid_load(pid_t *pid)
++{
++	FILE *f = fopen(PIDFILE, "r");
++	int i;
++
++	if (f == NULL) {
++		if (errno != ENOENT)
++			msg_print(MSG_ERR, "Can't open pidfile %s: %s",
++			          PIDFILE, strerror(errno));
++		return 0;
++	}
++
++	if (fscanf(f, "%i", &i) != 1) {
++		msg_print(MSG_ERR, "Invalid pidfile format.");
++		return 0;
++	}
++
++	*pid = i;
++	return 1;
++}
++
++int pid_erase(void)
++{
++	if (unlink(PIDFILE) == -1) {
++		if (errno == ENOENT)
++			return 0;
++
++		msg_print(MSG_ERR, "Can't remove pidfile %s: %s", 
++		          PIDFILE, strerror(errno));
++		
++		return 1;
++	}
++
++	return 0;
++}
+diff --git a/src/pidfile.h b/src/pidfile.h
+new file mode 100644
+index 0000000..64b8a82
+--- /dev/null
++++ b/src/pidfile.h
+@@ -0,0 +1,54 @@
++/*****************************************************************************
++ * This is simple zaurusd for handling suspend and backlight via keys.       *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __PIDFILE_H__
++#define __PIDFILE_H__
++
++#include <sys/types.h>
++#include <unistd.h>
++
++/*
++ * Save pid to pidfile.
++ *
++ * Returns 1 if there is allready pidfile and process 
++ * running with pid in this pidfile or if pidfile 
++ * cannot be written.
++ *
++ * Returns 0 if writing pid into pidfile was successful.
++ */
++int pid_save(void);
++
++/*
++ * Loads pid from pidfile.
++ *
++ * Returns 0 if there is no pidfile or the content is invalid.
++ */
++int pid_load(pid_t *pid);
++
++/*
++ * Remove pidfile.
++ *
++ * Returns 0 if the file was erased.
++ */
++int pid_erase(void);
++
++#endif /* __PIDFILE_H__ */
+diff --git a/src/power.c b/src/power.c
+new file mode 100644
+index 0000000..747dfca
+--- /dev/null
++++ b/src/power.c
+@@ -0,0 +1,86 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <stdio.h>
++#include <errno.h>
++#include <string.h>
++
++#include "config.h"
++#include "backlight.h"
++#include "display.h"
++#include "power.h"
++#include "msg.h"
++
++void power_suspend(void)
++{
++	FILE *f = fopen(POWER_STATE_SYS, "w");
++	
++	/* So that user can see kernel messages when something goes wrong,
++	 * and so that user sees machine resuming -- and kernel messages if
++	 * it goes wrong. */
++	display_on();
++	if (backlight_get() == 0)
++		backlight_set(1);
++
++	if (f == NULL) {
++		msg_print(MSG_ERR, "%s: %s", POWER_STATE_SYS, strerror(errno));
++		return;
++	}
++
++	fprintf(f, "mem");
++	fclose(f);
++}
++
++/* 
++ * We parse apm emulation proc interface, content of the file is following:
++ *
++ * driver-version
++ * bios-version
++ * apm-flags
++ * ac-line-status: { 0x00 - off, 0x01 - on }
++ * battery-status
++ * battery-flags
++ * battery-percentage
++ * ...
++ *
++ * for details see include/linux/apm-emulation.h and friends.
++ */
++int power_on_ac(void)
++{
++	FILE *f = fopen(APM_PROC, "r");
++	int dvu, dvl, bvu, bvl;
++	unsigned int apmf, acls;
++
++	if (f == NULL) {
++		msg_print(MSG_ERR, "%s: %s", APM_PROC, strerror(errno));
++		return -1;
++	}
++	
++	fscanf(f, "%i.%i %i.%i %x %x", &dvu, &dvl, &bvu, &bvl, &apmf, &acls);
++
++	//printf("driver: %i.%i apm: %x on ac %x\n", dvu, dvl, apmf, acls);
++
++	if (acls == 0x01)
++		return 1;
++
++	return 0;
++}
+diff --git a/src/power.h b/src/power.h
+new file mode 100644
+index 0000000..b3d3071
+--- /dev/null
++++ b/src/power.h
+@@ -0,0 +1,36 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __POWER_H__
++#define __POWER_H__
++
++/*
++ * Causes suspend to memory.
++ */
++void power_suspend(void);
++
++/*
++ * Returns true if we are on ac power.
++ */
++int power_on_ac(void);
++
++#endif /* __POWER_H__ */
+diff --git a/src/socket.c b/src/socket.c
+new file mode 100644
+index 0000000..39efc5c
+--- /dev/null
++++ b/src/socket.c
+@@ -0,0 +1,106 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <sys/socket.h>
++#include <sys/un.h>
++#include <unistd.h>
++#include <errno.h>
++#include <string.h>
++#include "socket.h"
++#include "msg.h"
++
++#define UNIX_PATH_MAX 108
++
++int socket_create(const char *path)
++{
++	int fd;
++	struct sockaddr_un sockaddr;
++
++	/* delete old unix socket */
++	if (unlink(path) == -1 && errno != ENOENT) {
++		msg_print(MSG_WARN, "unlink: %s failed: %s", path, strerror(errno));
++		return -1;
++	}
++
++	/* create new socket */
++	if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
++		msg_print(MSG_WARN, "socket: %s failed: %s", path, strerror(errno));
++		return -1;
++	}
++
++	sockaddr.sun_family = AF_UNIX;
++        strncpy(sockaddr.sun_path, path, UNIX_PATH_MAX);
++       	sockaddr.sun_path[UNIX_PATH_MAX - 1] = '\0';
++
++	/* bind named socket with fd */
++	if (bind(fd, (struct sockaddr *)&sockaddr, sizeof(sockaddr)) == -1) {
++		msg_print(MSG_WARN, "bind failed: %s", strerror(errno));
++		close(fd);
++		return -1;
++	}
++
++	/* start listening on that socket */
++        if (listen(fd, 5) == -1) {
++		msg_print(MSG_WARN, "listen failed: %s", strerror(errno));
++		close(fd);
++		return -1;
++	}
++
++	return fd;
++}
++
++int socket_open(const char *path)
++{
++	int fd;
++	struct sockaddr_un sockaddr;
++	
++	/* create new socket */
++	if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
++		msg_print(MSG_WARN, "socket: %s failed: %s", path, strerror(errno));
++		return -1;
++	}
++
++	sockaddr.sun_family = AF_UNIX;
++        strncpy(sockaddr.sun_path, path, UNIX_PATH_MAX);
++      	
++	/* connect to socket */
++	if (connect(fd, (struct sockaddr *) &sockaddr, sizeof(sockaddr)) == -1) {
++		msg_print(MSG_WARN, "connect: %s failed: %s", path, strerror(errno));
++		close(fd);
++		return -1;
++	}
++
++	return fd;
++}
++
++int socket_client(int fd)
++{
++	int cli_fd;
++
++	/* extract connection request from server fd */
++	if ((cli_fd = accept(fd, NULL, NULL)) == -1) {
++		msg_print(MSG_WARN, "accept failed (fd %i): %s", fd, strerror(errno));
++		return -1;
++	}
++
++	return cli_fd;
++}
+diff --git a/src/socket.h b/src/socket.h
+new file mode 100644
+index 0000000..c991550
+--- /dev/null
++++ b/src/socket.h
+@@ -0,0 +1,41 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __SOCKET_H__
++#define __SOCKET_H__
++
++/*
++ * Create named socket and return file descriptor.
++ */
++int socket_create(const char *path);
++
++/*
++ * Opens socket and returns file descriptor.
++ */
++int socket_open(const char *path);
++
++/*
++ * Read from server fd, return client fd.
++ */
++int socket_client(int fd);
++
++#endif /* __SOCKET_H__ */
+diff --git a/src/socket_cmd.c b/src/socket_cmd.c
+new file mode 100644
+index 0000000..b0702c9
+--- /dev/null
++++ b/src/socket_cmd.c
+@@ -0,0 +1,131 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <stdio.h>
++
++#include "socket_cmd.h"
++#include "backlight.h"
++#include "display.h"
++#include "msg.h"
++
++const char *scmd_name[] = {
++	"exit",
++	"suspend_on_ac_on",
++	"suspend_on_ac_off",
++	"suspend_timeout",
++	"backlight_on",
++	"backlight_off",
++	"backlight_off_timeout",
++	"backlight_set",
++	"backlight_get",
++
++};
++
++const char *scmd_desc[] = {
++	"exit the daemon",
++	"enable suspend on ac",
++	"disable suspend on ac",
++	"set suspend timeout",
++	"turn backlight on",
++	"turn backlight off",
++	"set backlight timeout",
++	"set backlight brightness",
++	"get backlight brightness",
++};
++
++void dump_buf(char *buf, int len)
++{
++	int i;
++
++	for (i = 0; i < len; i++)
++		printf("0x%.2x ", buf[i]);
++
++	printf("\n");
++}
++
++
++int scmd_update(char *buf, int len, struct scmd_config *config)
++{
++	int pos = 0;
++
++	dump_buf(buf, len);
++
++	for (;;) {
++	
++		/* find start byte */
++		while (buf[pos] != SCMD_START && pos < len)
++			pos++;
++		
++		if (pos >= len)
++			return len - 1;
++
++		/* parse commands */
++		switch (buf[++pos]) {
++			case SCMD_EXIT:
++				return -1;
++			break;
++			case SCMD_SUSPEND_ON_AC_ON:
++				config->suspend_on_ac = 1;
++			break;
++			case SCMD_SUSPEND_ON_AC_OFF:
++				config->suspend_on_ac = 0;
++			break;
++			case SCMD_SUSPEND_ON_BAT_ON:
++				config->suspend_on_bat = 1;
++			break;
++			case SCMD_SUSPEND_ON_BAT_OFF:
++				config->suspend_on_bat = 0;
++			break;
++			case SCMD_SUSPEND_TIMEOUT:
++				if (pos + 2 >= len)
++					return pos - 1;
++				
++				config->suspend_timeout = *(uint16_t*)(buf+pos+1);
++				printf("timeout %u\n", config->suspend_timeout);
++			break;
++			case SCMD_BACKLIGHT_OFF:
++				display_off();
++			break;
++			case SCMD_BACKLIGHT_ON:
++				display_on();
++			break;
++			case SCMD_BACKLIGHT_OFF_TIMEOUT:
++				if (pos + 2 >= len)
++					return pos - 1;
++				
++			break;
++			case SCMD_BACKLIGHT_GET:
++				//
++			break;
++			case SCMD_BACKLIGHT_SET:
++				if (pos + 1 >= len)
++					return pos - 1;
++				backlight_set(buf[pos+1]);
++			break;
++			default:
++				msg_print(MSG_WARN, "invalid command from zaurusd-ctl, closing connection...");
++				return -1;
++		}
++	}
++
++	return pos - 1;
++}
+diff --git a/src/socket_cmd.h b/src/socket_cmd.h
+new file mode 100644
+index 0000000..9c01ed9
+--- /dev/null
++++ b/src/socket_cmd.h
+@@ -0,0 +1,69 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __SOCKET_CMD_H__
++#define __SOCKET_CMD_H__
++
++#include <stdint.h>
++
++/* synchro byte */
++#define SCMD_START                 0x42
++
++/* commands */
++#define SCMD_EXIT                  0x00 /* end of communication */
++#define SCMD_SUSPEND_ON_AC_ON      0x01
++#define SCMD_SUSPEND_ON_AC_OFF     0x02
++
++#define SCMD_SUSPEND_ON_BAT_ON     0x03
++#define SCMD_SUSPEND_ON_BAT_OFF    0x04
++
++#define SCMD_SUSPEND_TIMEOUT       0x05 /* followed by two bytes value in seconds */
++
++#define SCMD_BACKLIGHT_OFF         0x06
++#define SCMD_BACKLIGHT_ON          0x07
++#define SCMD_BACKLIGHT_OFF_TIMEOUT 0x08 /* followed by two bytes value in seconds */
++
++#define SCMD_BACKLIGHT_SET         0x09 /* followed by byte */
++#define SCMD_BACKLIGHT_GET         0x0a /* followed by byte */
++
++#define SCMD_CNT (SCMD_BACKLIGHT_GET + 1) /* last command + 1 */
++
++/* commands description */
++extern const char *scmd_name[];
++extern const char *scmd_desc[];
++
++/* zaurusd state */
++struct scmd_config {
++	int suspend_on_ac;
++	int suspend_on_bat;
++
++	uint16_t suspend_timeout;
++	uint16_t backlight_timeout;
++};
++
++/*
++ * Handle connection and update state and returns nuber of
++ * processed chars from buf. In case SCMD_EXIT was found, returns -1.
++ */
++int scmd_update(char *buf, int len, struct scmd_config *config);
++
++#endif /* __SOCKET_CMD_H__ */
+diff --git a/src/sysfs.c b/src/sysfs.c
+new file mode 100644
+index 0000000..6c3b473
+--- /dev/null
++++ b/src/sysfs.c
+@@ -0,0 +1,63 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <stdio.h>
++#include <errno.h>
++#include <string.h>
++#include "sysfs.h"
++#include "msg.h"
++
++int sysfs_write(const char *path, int val)
++{
++	FILE *f;
++	
++	f = fopen(path, "w");
++	
++	if (f == NULL) {
++		msg_print(MSG_ERR, "%s: %s", path, strerror(errno));
++		return -1;
++	}	
++	
++	fprintf(f, "%i", val);
++	fclose(f);
++
++	return 0;
++}
++
++int sysfs_read(const char *path, int *val)
++{
++	FILE *f = fopen(path, "r");
++
++	if (f == NULL) {
++		msg_print(MSG_ERR, "%s: %s", path, strerror(errno));
++		return -1;
++	}
++	
++	if (fscanf(f, "%i", val) != 1) {
++		msg_print(MSG_ERR, "conversion of %s to integer failed", path);
++		return -2;
++	}
++
++	fclose(f);
++
++	return 0;
++}
+diff --git a/src/sysfs.h b/src/sysfs.h
+new file mode 100644
+index 0000000..1accdf2
+--- /dev/null
++++ b/src/sysfs.h
+@@ -0,0 +1,37 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __SYSFS_H__
++#define __SYSFS_H__
++
++/*
++ * Writes integer to file path.
++ */
++int sysfs_write(const char *path, int val);
++
++/*
++ * Reads integer from sysfs path.
++ */
++int sysfs_read(const char *path, int *val);
++
++
++#endif /* __SYSFS_H__ */
+diff --git a/src/time.c b/src/time.c
+new file mode 100644
+index 0000000..4f68278
+--- /dev/null
++++ b/src/time.c
+@@ -0,0 +1,64 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <stdio.h>
++#include <errno.h>
++#include <string.h>
++#include <time.h>
++
++#include "config.h"
++#include "time.h"
++#include "msg.h"
++
++void time_update(void)
++{
++	time_t rtc = time(NULL), disk;
++	FILE *f = fopen(TIME_ETC, "r");
++
++	if (f == NULL) {
++		msg_print(MSG_WARN, "%s: %s", TIME_ETC, strerror(errno));
++		return;
++	}
++	
++	fscanf(f, "%li", &disk);
++	fclose(f);
++
++	if (disk > rtc) {
++		rtc = disk;
++		if (stime(&rtc)) {
++			msg_print(MSG_ERR, "stime(): %s", strerror(errno));
++			return;
++		}
++	}
++
++	f = fopen(TIME_ETC, "w");
++
++	if (f == NULL) {
++		msg_print(MSG_ERR, "%s: %s", TIME_ETC, strerror(errno));
++		return;
++	}
++
++	fprintf(f, "%li", rtc);
++	
++	if (fclose(f) != 0)
++		msg_print(MSG_ERR, "%s: %s", TIME_ETC, strerror(errno));
++}
+diff --git a/src/time.h b/src/time.h
+new file mode 100644
+index 0000000..9f6c93b
+--- /dev/null
++++ b/src/time.h
+@@ -0,0 +1,33 @@
++/*****************************************************************************
++ * This file is part of zaurusd daemon.                                      *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#ifndef __TIME_H__
++#define __TIME_H__
++
++/*
++ * Load and save time from file in order for time not to go backwards.
++ *
++ * (time is being reset on zaurus on power loss)
++ */
++void time_update(void);
++
++#endif /* __TIME_H__ */
+diff --git a/src/zaurusd-ctl.c b/src/zaurusd-ctl.c
+new file mode 100644
+index 0000000..19086bb
+--- /dev/null
++++ b/src/zaurusd-ctl.c
+@@ -0,0 +1,165 @@
++/*****************************************************************************
++ * This is simple zaurusd for handling suspend and backlight via keys.       *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <unistd.h>
++#include <errno.h>
++#include <string.h>
++#include <stdlib.h>
++
++#include "msg.h"
++#include "config.h"
++#include "socket.h"
++#include "socket_cmd.h"
++
++static void do_write(int fd, const char *buf, int len)
++{
++	int size = 0;
++	int ret;
++
++	while (size < len) {
++		ret = write(fd, buf + size, len - size);
++		
++		if (ret == -1) {
++			msg_print(MSG_ERR, "write to zarusd failed: %s",
++			          strerror(errno));
++			return;
++		}
++
++		size += ret;
++	}
++}
++
++static void command_send(int fd, char cmd)
++{
++	char buf[2] = {SCMD_START, cmd};
++	do_write(fd, buf, 2);
++}
++
++static void command_send_u16(int fd, char cmd, uint16_t val)
++{
++	char buf[4]    = {SCMD_START, cmd};
++	uint16_t *ubuf = (uint16_t *)(buf + 2);
++
++	*ubuf = val;
++
++	do_write(fd, buf, 4);
++}
++
++static void command_send_u8(int fd, char cmd, uint8_t val)
++{
++	char buf[3] = {SCMD_START, cmd, val};
++	do_write(fd, buf, 3);
++}
++
++static void parse_backlight(int fd, char *optarg)
++{
++	uint8_t val;
++	
++	if (!strcasecmp(optarg, "on")) {
++		command_send(fd, SCMD_BACKLIGHT_ON);
++		return;
++	}
++	
++	if (!strcasecmp(optarg, "off")) {
++		command_send(fd, SCMD_BACKLIGHT_OFF);
++		return;
++	}
++
++	val = atoi(optarg);
++	
++	command_send_u8(fd, SCMD_BACKLIGHT_SET, val);
++}
++
++static void say_goodbye(int fd)
++{
++	/* say goodbye */
++	command_send(fd, SCMD_EXIT);	
++	close(fd);
++}
++
++const char *suspends[] = {
++	"bat=off",
++	"bat=on",
++	"ac=off",
++	"ac=on",
++};
++
++static void parse_suspend(int fd, char *optarg)
++{
++	int i;
++	uint16_t val;
++
++	for (i = 0; i < 4; i++)
++		if (!strcasecmp(optarg, suspends[i]))
++			return;
++
++	switch (i) {
++		case 0:
++			command_send(fd, SCMD_SUSPEND_ON_BAT_OFF);
++		break;
++		case 1:
++			command_send(fd, SCMD_SUSPEND_ON_BAT_ON);
++		break;
++		case 2:
++			command_send(fd, SCMD_SUSPEND_ON_AC_ON);
++		break;
++		case 3:
++			command_send(fd, SCMD_SUSPEND_ON_AC_OFF);
++		break;
++		default:
++			val = atoi(optarg);
++			command_send_u16(fd, SCMD_SUSPEND_TIMEOUT, val);
++	}
++}
++
++int main(int argc, char *argv[])
++{
++	int fd;
++	int opt;
++
++	msg_set_name("zaurusd-ctl: ");
++	
++	fd = socket_open(CONTROL_SOCKET);
++
++	if (fd == -1) {
++		msg_print(MSG_ERR, "Can't connect to zaurusd control socket, exiting...");
++		return 1;
++	}
++	
++	while ((opt = getopt(argc, argv, "b:hs:")) != -1) {
++		switch (opt) {
++			case 'b':
++				parse_backlight(fd, optarg);
++			break;
++			case 's':
++				parse_suspend(fd, optarg);
++			break;
++			case 'h':
++
++			break;
++		}
++	}
++
++	say_goodbye(fd);	
++
++	return 0;
++}
+diff --git a/src/zaurusd.c b/src/zaurusd.c
+new file mode 100644
+index 0000000..7ecd007
+--- /dev/null
++++ b/src/zaurusd.c
+@@ -0,0 +1,347 @@
++/*****************************************************************************
++ * This is simple zaurusd for handling suspend and backlight via keys.       *
++ *                                                                           *
++ * Zaurusd is free software; you can redistribute it and/or                  *
++ * modify it under the terms of the GNU Lesser General Public                *
++ * License as published by the Free Software Foundation; either              *
++ * version 2.1 of the License, or (at your option) any later version.        *
++ *                                                                           *
++ * Zaurusd is distributed in the hope that it will be useful,                *
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
++ * Lesser General Public License for more details.                           *
++ *                                                                           *
++ * You should have received a copy of the GNU Lesser General Public          *
++ * License along with zaurusd; if not, write to the Free Software            *
++ * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
++ * Boston, MA  02110-1301  USA                                               *
++ *                                                                           *
++ * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
++ *                                                                           *
++ *****************************************************************************/
++
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <stdio.h>
++#include <string.h>
++#include <errno.h>
++#include <stdlib.h>
++#include <unistd.h>
++#include <signal.h>
++#include <time.h>
++#include <linux/input.h>
++#include <evfilter.h>
++
++#include "config.h"
++#include "backlight.h"
++#include "display.h"
++#include "power.h"
++#include "time.h"
++#include "pidfile.h"
++#include "socket.h"
++#include "msg.h"
++#include "socket_cmd.h"
++
++static char *help = 
++"***      zaurusd      ***\n"
++"-h prints this help\n"
++"-d do not dameonize\n"
++"-t save and recall time\n";
++
++static int closed, face_down;
++static int closed_time;
++
++static struct scmd_config config;
++
++static void print_help(int exitstatus)
++{
++	printf("%s", help);
++	exit(exitstatus);
++}
++
++/*
++ * Read keys from spitz matrix keyboard.
++ */
++static int event_keyboard(struct evf_io_queue_memb *self)
++{
++	static int fn_pressed = 0;
++	struct input_event ev;
++	int    size = sizeof (struct input_event);
++
++	if (read(self->fd, &ev, size) < size) {
++		msg_print(MSG_ERR, "Something really bad happend, "
++		                   "closing zaurus keyboard input fd.");
++		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
++	}
++	
++	if (ev.type == EV_KEY) {
++		switch (ev.code) {
++			case KEY_3:
++				if (fn_pressed)
++					backlight_down();
++			break;
++			case KEY_4:
++				if (fn_pressed)
++					backlight_up();
++			break;
++			case KEY_1:
++				if (fn_pressed)
++					display_off();
++			break;
++			case KEY_2:
++				if (fn_pressed)
++					display_on();
++			break;
++			case KEY_F3:
++				if (ev.value)
++					fn_pressed = 1;
++				else
++					fn_pressed = 0;	
++			break;
++			default:
++				/* if we turned off display
++				 * turn it on on pressing any key */
++				if (!display_state())
++					display_on();
++		}
++	}
++	
++	return EVF_IO_QUEUE_OK;
++}
++
++/*
++ * Reads gpio buttons
++ */
++static int event_gpio_btn(struct evf_io_queue_memb *self)
++{
++	struct input_event ev;
++	static int suspended = 0;
++	int size = sizeof(struct input_event);
++
++	if (read(self->fd, &ev, size) < size) {
++		msg_print(MSG_ERR, "Something really bad happend, "
++		                   "closing zaurus gpio buttons fd.");
++		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
++	}
++	
++	if (ev.type == EV_PWR &&  ev.code == KEY_SUSPEND && ev.value == 1) {
++		if (suspended)
++			suspended--;
++		else {
++			suspended = 1;
++			closed_time = 0;
++			power_suspend();
++		}
++	}
++
++	/* 1 == closed, 0 == face down */
++	if (ev.type == EV_SW && ev.code == 0 && ev.value == 1) {
++		face_down = 1;
++	}
++	
++	if (ev.type == EV_SW && ev.code == 1 && ev.value == 1) {
++		closed = 1;
++	}
++
++	if (ev.type == EV_SW && ev.code == 0 && ev.value == 0) {
++		face_down = 0;
++		closed_time = 0;
++	}
++	
++	if (ev.type == EV_SW && ev.code == 1 && ev.value == 0) {
++		closed = 0;
++		closed_time = 0;
++	}
++	
++	return EVF_IO_QUEUE_OK;
++}
++
++struct client_buf {
++	char buf[128];
++	int  pos;
++};
++
++static int client_read(struct evf_io_queue_memb *self)
++{
++	int size;
++	int proc;
++	struct client_buf *buf = (struct client_buf*) self->priv;
++
++	msg_print(MSG_DBG, "zaurusd-ctl data (fd %i)", self->fd);
++
++	if ((size = read(self->fd, buf->buf + buf->pos, 128 - buf->pos)) <= 0) {
++		msg_print(MSG_WARN, "connection to zaurusd-ctl closed unexpectedly: %s",
++		                    strerror(errno));
++		free(self->priv);
++		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
++	}
++	
++	/* update zaurusd configuration */
++	if ((proc = scmd_update(buf->buf, size + buf->pos, &config)) == -1) {
++		msg_print(MSG_DBG, "zaurusd-clt exiting...");
++		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
++	}
++
++	/* copy the rest of buffer to begining and set pos */
++	if (proc < size - 1) {
++		memmove(buf->buf + proc, buf->buf, size - proc);
++		buf->pos = size - proc;
++	} else 
++		buf->pos = 0;
++	
++	return EVF_IO_QUEUE_OK;
++}
++
++static int daemon_read(struct evf_io_queue_memb *self)
++{
++	int client;
++	struct client_buf *buf;
++
++	msg_print(MSG_DBG, "zaurusd-ctl connection request");
++
++	client = socket_client(self->fd);
++
++	if (client == -1) {
++		msg_print(MSG_ERR, "accept failed, closing zaurusd-ctl socket");
++		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
++	}
++
++	msg_print(MSG_DBG, "client socket %i", client);
++	
++	buf = malloc(sizeof(struct client_buf));
++	buf->pos = 0;
++
++	if (buf == NULL) {
++		msg_print(MSG_WARN, "failed to allocate buffer for zaurusd-ctl");
++		close(client);
++		return EVF_IO_QUEUE_OK;
++	}
++	
++	
++	if (!evf_io_queue_add((struct evf_io_queue*) self->priv, client, client_read, buf)) {
++		msg_print(MSG_WARN, "malloc failed, can't allocate queue for client");
++		close(client);
++	}
++	
++	return EVF_IO_QUEUE_OK;
++}
++
++static void add_input(const char *dev, struct evf_io_queue *queue,
++                      int (*read)(struct evf_io_queue_memb *self))
++{
++	int fd = open(dev, O_RDONLY);
++	
++	if (fd < 0) {
++		msg_print(MSG_WARN, "Can't open input: %s: %s", dev, strerror(errno));
++		exit(EXIT_FAILURE);
++	}
++
++	if (!evf_io_queue_add(queue, fd, read, NULL)) {
++		msg_print(MSG_WARN, "malloc failed :(");
++		exit(EXIT_FAILURE);
++	}
++}
++
++void sighandler(int sig __attribute__ ((unused)))
++{
++	pid_erase();
++	exit(EXIT_SUCCESS);
++}
++
++static void create_socket(struct evf_io_queue *queue)
++{
++	int fd = socket_create(CONTROL_SOCKET);
++
++	if (fd == -1) {
++		msg_print(MSG_WARN, "cannot create socket, zaurusd-ctl will be disabled.");
++		return;
++	}
++
++	if (!evf_io_queue_add(queue, fd, daemon_read, queue)) {
++		msg_print(MSG_WARN, "malloc failed :(, zaurusd-ctl will be disabled.");
++		close(fd);
++	}
++}
++
++int main(int argc, char *argv[])
++{
++	int save_time = 0;
++	int opt;
++	int dameonize = 1;
++	int backlight_is_off = 0;
++	time_t before_select;
++	struct evf_io_queue *queue;
++	
++	msg_set_name("zaurusd: ");
++
++	while ((opt = getopt(argc, argv, "dht")) != -1) {
++		switch (opt) {
++			case 'h':
++				print_help(EXIT_SUCCESS);
++			break;
++			case 'd':
++				dameonize = 0;
++			break;
++			case 't':
++				save_time = 1;
++			break;
++			default:
++				print_help(EXIT_FAILURE);
++			break;
++		}
++	}
++	
++	queue = evf_io_queue_new();
++
++	if (queue == NULL) {
++		msg_print(MSG_ERR, "malloc failed :(");
++		exit(EXIT_FAILURE);
++	}
++
++	add_input(MATRIX_KBD_DEV, queue, event_keyboard);
++	add_input(GPIO_BTN_DEV, queue, event_gpio_btn);
++	create_socket(queue);
++
++	if (dameonize) {
++		daemon(0, 0);
++		msg_set_output(MSG_SYSLOG);
++	}
++	
++	signal(SIGINT,  sighandler);
++	signal(SIGTERM, sighandler);
++
++	if (pid_save())
++		exit(EXIT_FAILURE);
++	
++
++	for (;;) {
++		static struct timeval tv;
++		tv.tv_sec = 30;
++
++		if (save_time)
++			time_update();
++	
++		time(&before_select);
++		evf_io_queue_wait(queue, &tv);
++		
++		if (closed && face_down && (power_on_ac() != 0x01) &&
++		    (before_select - time(NULL) > 25))
++			closed_time++;
++
++		if (closed && face_down) {
++			backlight_is_off = 1;
++			backlight_off();
++		}
++		
++		if (backlight_is_off && !(closed && face_down)) {
++			backlight_is_off = 0;
++			backlight_on();
++		}
++
++		if (closed_time == 10) {
++			closed_time = 0;
++			power_suspend();
++		}
++	}
++}
+diff --git a/sysfs.c b/sysfs.c
+deleted file mode 100644
+index 6c3b473..0000000
+--- a/sysfs.c
++++ /dev/null
+@@ -1,63 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <stdio.h>
+-#include <errno.h>
+-#include <string.h>
+-#include "sysfs.h"
+-#include "msg.h"
+-
+-int sysfs_write(const char *path, int val)
+-{
+-	FILE *f;
+-	
+-	f = fopen(path, "w");
+-	
+-	if (f == NULL) {
+-		msg_print(MSG_ERR, "%s: %s", path, strerror(errno));
+-		return -1;
+-	}	
+-	
+-	fprintf(f, "%i", val);
+-	fclose(f);
+-
+-	return 0;
+-}
+-
+-int sysfs_read(const char *path, int *val)
+-{
+-	FILE *f = fopen(path, "r");
+-
+-	if (f == NULL) {
+-		msg_print(MSG_ERR, "%s: %s", path, strerror(errno));
+-		return -1;
+-	}
+-	
+-	if (fscanf(f, "%i", val) != 1) {
+-		msg_print(MSG_ERR, "conversion of %s to integer failed", path);
+-		return -2;
+-	}
+-
+-	fclose(f);
+-
+-	return 0;
+-}
+diff --git a/sysfs.h b/sysfs.h
+deleted file mode 100644
+index 1accdf2..0000000
+--- a/sysfs.h
++++ /dev/null
+@@ -1,37 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __SYSFS_H__
+-#define __SYSFS_H__
+-
+-/*
+- * Writes integer to file path.
+- */
+-int sysfs_write(const char *path, int val);
+-
+-/*
+- * Reads integer from sysfs path.
+- */
+-int sysfs_read(const char *path, int *val);
+-
+-
+-#endif /* __SYSFS_H__ */
+diff --git a/time.c b/time.c
+deleted file mode 100644
+index 4f68278..0000000
+--- a/time.c
++++ /dev/null
+@@ -1,64 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <stdio.h>
+-#include <errno.h>
+-#include <string.h>
+-#include <time.h>
+-
+-#include "config.h"
+-#include "time.h"
+-#include "msg.h"
+-
+-void time_update(void)
+-{
+-	time_t rtc = time(NULL), disk;
+-	FILE *f = fopen(TIME_ETC, "r");
+-
+-	if (f == NULL) {
+-		msg_print(MSG_WARN, "%s: %s", TIME_ETC, strerror(errno));
+-		return;
+-	}
+-	
+-	fscanf(f, "%li", &disk);
+-	fclose(f);
+-
+-	if (disk > rtc) {
+-		rtc = disk;
+-		if (stime(&rtc)) {
+-			msg_print(MSG_ERR, "stime(): %s", strerror(errno));
+-			return;
+-		}
+-	}
+-
+-	f = fopen(TIME_ETC, "w");
+-
+-	if (f == NULL) {
+-		msg_print(MSG_ERR, "%s: %s", TIME_ETC, strerror(errno));
+-		return;
+-	}
+-
+-	fprintf(f, "%li", rtc);
+-	
+-	if (fclose(f) != 0)
+-		msg_print(MSG_ERR, "%s: %s", TIME_ETC, strerror(errno));
+-}
+diff --git a/time.h b/time.h
+deleted file mode 100644
+index 9f6c93b..0000000
+--- a/time.h
++++ /dev/null
+@@ -1,33 +0,0 @@
+-/*****************************************************************************
+- * This file is part of zaurusd daemon.                                      *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#ifndef __TIME_H__
+-#define __TIME_H__
+-
+-/*
+- * Load and save time from file in order for time not to go backwards.
+- *
+- * (time is being reset on zaurus on power loss)
+- */
+-void time_update(void);
+-
+-#endif /* __TIME_H__ */
+diff --git a/zaurusd-ctl.c b/zaurusd-ctl.c
+deleted file mode 100644
+index 19086bb..0000000
+--- a/zaurusd-ctl.c
++++ /dev/null
+@@ -1,165 +0,0 @@
+-/*****************************************************************************
+- * This is simple zaurusd for handling suspend and backlight via keys.       *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <unistd.h>
+-#include <errno.h>
+-#include <string.h>
+-#include <stdlib.h>
+-
+-#include "msg.h"
+-#include "config.h"
+-#include "socket.h"
+-#include "socket_cmd.h"
+-
+-static void do_write(int fd, const char *buf, int len)
+-{
+-	int size = 0;
+-	int ret;
+-
+-	while (size < len) {
+-		ret = write(fd, buf + size, len - size);
+-		
+-		if (ret == -1) {
+-			msg_print(MSG_ERR, "write to zarusd failed: %s",
+-			          strerror(errno));
+-			return;
+-		}
+-
+-		size += ret;
+-	}
+-}
+-
+-static void command_send(int fd, char cmd)
+-{
+-	char buf[2] = {SCMD_START, cmd};
+-	do_write(fd, buf, 2);
+-}
+-
+-static void command_send_u16(int fd, char cmd, uint16_t val)
+-{
+-	char buf[4]    = {SCMD_START, cmd};
+-	uint16_t *ubuf = (uint16_t *)(buf + 2);
+-
+-	*ubuf = val;
+-
+-	do_write(fd, buf, 4);
+-}
+-
+-static void command_send_u8(int fd, char cmd, uint8_t val)
+-{
+-	char buf[3] = {SCMD_START, cmd, val};
+-	do_write(fd, buf, 3);
+-}
+-
+-static void parse_backlight(int fd, char *optarg)
+-{
+-	uint8_t val;
+-	
+-	if (!strcasecmp(optarg, "on")) {
+-		command_send(fd, SCMD_BACKLIGHT_ON);
+-		return;
+-	}
+-	
+-	if (!strcasecmp(optarg, "off")) {
+-		command_send(fd, SCMD_BACKLIGHT_OFF);
+-		return;
+-	}
+-
+-	val = atoi(optarg);
+-	
+-	command_send_u8(fd, SCMD_BACKLIGHT_SET, val);
+-}
+-
+-static void say_goodbye(int fd)
+-{
+-	/* say goodbye */
+-	command_send(fd, SCMD_EXIT);	
+-	close(fd);
+-}
+-
+-const char *suspends[] = {
+-	"bat=off",
+-	"bat=on",
+-	"ac=off",
+-	"ac=on",
+-};
+-
+-static void parse_suspend(int fd, char *optarg)
+-{
+-	int i;
+-	uint16_t val;
+-
+-	for (i = 0; i < 4; i++)
+-		if (!strcasecmp(optarg, suspends[i]))
+-			return;
+-
+-	switch (i) {
+-		case 0:
+-			command_send(fd, SCMD_SUSPEND_ON_BAT_OFF);
+-		break;
+-		case 1:
+-			command_send(fd, SCMD_SUSPEND_ON_BAT_ON);
+-		break;
+-		case 2:
+-			command_send(fd, SCMD_SUSPEND_ON_AC_ON);
+-		break;
+-		case 3:
+-			command_send(fd, SCMD_SUSPEND_ON_AC_OFF);
+-		break;
+-		default:
+-			val = atoi(optarg);
+-			command_send_u16(fd, SCMD_SUSPEND_TIMEOUT, val);
+-	}
+-}
+-
+-int main(int argc, char *argv[])
+-{
+-	int fd;
+-	int opt;
+-
+-	msg_set_name("zaurusd-ctl: ");
+-	
+-	fd = socket_open(CONTROL_SOCKET);
+-
+-	if (fd == -1) {
+-		msg_print(MSG_ERR, "Can't connect to zaurusd control socket, exiting...");
+-		return 1;
+-	}
+-	
+-	while ((opt = getopt(argc, argv, "b:hs:")) != -1) {
+-		switch (opt) {
+-			case 'b':
+-				parse_backlight(fd, optarg);
+-			break;
+-			case 's':
+-				parse_suspend(fd, optarg);
+-			break;
+-			case 'h':
+-
+-			break;
+-		}
+-	}
+-
+-	say_goodbye(fd);	
+-
+-	return 0;
+-}
+diff --git a/zaurusd.c b/zaurusd.c
+deleted file mode 100644
+index 7ecd007..0000000
+--- a/zaurusd.c
++++ /dev/null
+@@ -1,347 +0,0 @@
+-/*****************************************************************************
+- * This is simple zaurusd for handling suspend and backlight via keys.       *
+- *                                                                           *
+- * Zaurusd is free software; you can redistribute it and/or                  *
+- * modify it under the terms of the GNU Lesser General Public                *
+- * License as published by the Free Software Foundation; either              *
+- * version 2.1 of the License, or (at your option) any later version.        *
+- *                                                                           *
+- * Zaurusd is distributed in the hope that it will be useful,                *
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU         *
+- * Lesser General Public License for more details.                           *
+- *                                                                           *
+- * You should have received a copy of the GNU Lesser General Public          *
+- * License along with zaurusd; if not, write to the Free Software            *
+- * Foundation, Inc., 51 Franklin Street, Fifth Floor,                        *
+- * Boston, MA  02110-1301  USA                                               *
+- *                                                                           *
+- * Copyright (C) 2009-2010 Cyril Hrubis <metan@ucw.cz>                       *
+- *                                                                           *
+- *****************************************************************************/
+-
+-#include <sys/types.h>
+-#include <sys/stat.h>
+-#include <fcntl.h>
+-#include <stdio.h>
+-#include <string.h>
+-#include <errno.h>
+-#include <stdlib.h>
+-#include <unistd.h>
+-#include <signal.h>
+-#include <time.h>
+-#include <linux/input.h>
+-#include <evfilter.h>
+-
+-#include "config.h"
+-#include "backlight.h"
+-#include "display.h"
+-#include "power.h"
+-#include "time.h"
+-#include "pidfile.h"
+-#include "socket.h"
+-#include "msg.h"
+-#include "socket_cmd.h"
+-
+-static char *help = 
+-"***      zaurusd      ***\n"
+-"-h prints this help\n"
+-"-d do not dameonize\n"
+-"-t save and recall time\n";
+-
+-static int closed, face_down;
+-static int closed_time;
+-
+-static struct scmd_config config;
+-
+-static void print_help(int exitstatus)
+-{
+-	printf("%s", help);
+-	exit(exitstatus);
+-}
+-
+-/*
+- * Read keys from spitz matrix keyboard.
+- */
+-static int event_keyboard(struct evf_io_queue_memb *self)
+-{
+-	static int fn_pressed = 0;
+-	struct input_event ev;
+-	int    size = sizeof (struct input_event);
+-
+-	if (read(self->fd, &ev, size) < size) {
+-		msg_print(MSG_ERR, "Something really bad happend, "
+-		                   "closing zaurus keyboard input fd.");
+-		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
+-	}
+-	
+-	if (ev.type == EV_KEY) {
+-		switch (ev.code) {
+-			case KEY_3:
+-				if (fn_pressed)
+-					backlight_down();
+-			break;
+-			case KEY_4:
+-				if (fn_pressed)
+-					backlight_up();
+-			break;
+-			case KEY_1:
+-				if (fn_pressed)
+-					display_off();
+-			break;
+-			case KEY_2:
+-				if (fn_pressed)
+-					display_on();
+-			break;
+-			case KEY_F3:
+-				if (ev.value)
+-					fn_pressed = 1;
+-				else
+-					fn_pressed = 0;	
+-			break;
+-			default:
+-				/* if we turned off display
+-				 * turn it on on pressing any key */
+-				if (!display_state())
+-					display_on();
+-		}
+-	}
+-	
+-	return EVF_IO_QUEUE_OK;
+-}
+-
+-/*
+- * Reads gpio buttons
+- */
+-static int event_gpio_btn(struct evf_io_queue_memb *self)
+-{
+-	struct input_event ev;
+-	static int suspended = 0;
+-	int size = sizeof(struct input_event);
+-
+-	if (read(self->fd, &ev, size) < size) {
+-		msg_print(MSG_ERR, "Something really bad happend, "
+-		                   "closing zaurus gpio buttons fd.");
+-		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
+-	}
+-	
+-	if (ev.type == EV_PWR &&  ev.code == KEY_SUSPEND && ev.value == 1) {
+-		if (suspended)
+-			suspended--;
+-		else {
+-			suspended = 1;
+-			closed_time = 0;
+-			power_suspend();
+-		}
+-	}
+-
+-	/* 1 == closed, 0 == face down */
+-	if (ev.type == EV_SW && ev.code == 0 && ev.value == 1) {
+-		face_down = 1;
+-	}
+-	
+-	if (ev.type == EV_SW && ev.code == 1 && ev.value == 1) {
+-		closed = 1;
+-	}
+-
+-	if (ev.type == EV_SW && ev.code == 0 && ev.value == 0) {
+-		face_down = 0;
+-		closed_time = 0;
+-	}
+-	
+-	if (ev.type == EV_SW && ev.code == 1 && ev.value == 0) {
+-		closed = 0;
+-		closed_time = 0;
+-	}
+-	
+-	return EVF_IO_QUEUE_OK;
+-}
+-
+-struct client_buf {
+-	char buf[128];
+-	int  pos;
+-};
+-
+-static int client_read(struct evf_io_queue_memb *self)
+-{
+-	int size;
+-	int proc;
+-	struct client_buf *buf = (struct client_buf*) self->priv;
+-
+-	msg_print(MSG_DBG, "zaurusd-ctl data (fd %i)", self->fd);
+-
+-	if ((size = read(self->fd, buf->buf + buf->pos, 128 - buf->pos)) <= 0) {
+-		msg_print(MSG_WARN, "connection to zaurusd-ctl closed unexpectedly: %s",
+-		                    strerror(errno));
+-		free(self->priv);
+-		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
+-	}
+-	
+-	/* update zaurusd configuration */
+-	if ((proc = scmd_update(buf->buf, size + buf->pos, &config)) == -1) {
+-		msg_print(MSG_DBG, "zaurusd-clt exiting...");
+-		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
+-	}
+-
+-	/* copy the rest of buffer to begining and set pos */
+-	if (proc < size - 1) {
+-		memmove(buf->buf + proc, buf->buf, size - proc);
+-		buf->pos = size - proc;
+-	} else 
+-		buf->pos = 0;
+-	
+-	return EVF_IO_QUEUE_OK;
+-}
+-
+-static int daemon_read(struct evf_io_queue_memb *self)
+-{
+-	int client;
+-	struct client_buf *buf;
+-
+-	msg_print(MSG_DBG, "zaurusd-ctl connection request");
+-
+-	client = socket_client(self->fd);
+-
+-	if (client == -1) {
+-		msg_print(MSG_ERR, "accept failed, closing zaurusd-ctl socket");
+-		return EVF_IO_QUEUE_REM | EVF_IO_QUEUE_CLOSE;
+-	}
+-
+-	msg_print(MSG_DBG, "client socket %i", client);
+-	
+-	buf = malloc(sizeof(struct client_buf));
+-	buf->pos = 0;
+-
+-	if (buf == NULL) {
+-		msg_print(MSG_WARN, "failed to allocate buffer for zaurusd-ctl");
+-		close(client);
+-		return EVF_IO_QUEUE_OK;
+-	}
+-	
+-	
+-	if (!evf_io_queue_add((struct evf_io_queue*) self->priv, client, client_read, buf)) {
+-		msg_print(MSG_WARN, "malloc failed, can't allocate queue for client");
+-		close(client);
+-	}
+-	
+-	return EVF_IO_QUEUE_OK;
+-}
+-
+-static void add_input(const char *dev, struct evf_io_queue *queue,
+-                      int (*read)(struct evf_io_queue_memb *self))
+-{
+-	int fd = open(dev, O_RDONLY);
+-	
+-	if (fd < 0) {
+-		msg_print(MSG_WARN, "Can't open input: %s: %s", dev, strerror(errno));
+-		exit(EXIT_FAILURE);
+-	}
+-
+-	if (!evf_io_queue_add(queue, fd, read, NULL)) {
+-		msg_print(MSG_WARN, "malloc failed :(");
+-		exit(EXIT_FAILURE);
+-	}
+-}
+-
+-void sighandler(int sig __attribute__ ((unused)))
+-{
+-	pid_erase();
+-	exit(EXIT_SUCCESS);
+-}
+-
+-static void create_socket(struct evf_io_queue *queue)
+-{
+-	int fd = socket_create(CONTROL_SOCKET);
+-
+-	if (fd == -1) {
+-		msg_print(MSG_WARN, "cannot create socket, zaurusd-ctl will be disabled.");
+-		return;
+-	}
+-
+-	if (!evf_io_queue_add(queue, fd, daemon_read, queue)) {
+-		msg_print(MSG_WARN, "malloc failed :(, zaurusd-ctl will be disabled.");
+-		close(fd);
+-	}
+-}
+-
+-int main(int argc, char *argv[])
+-{
+-	int save_time = 0;
+-	int opt;
+-	int dameonize = 1;
+-	int backlight_is_off = 0;
+-	time_t before_select;
+-	struct evf_io_queue *queue;
+-	
+-	msg_set_name("zaurusd: ");
+-
+-	while ((opt = getopt(argc, argv, "dht")) != -1) {
+-		switch (opt) {
+-			case 'h':
+-				print_help(EXIT_SUCCESS);
+-			break;
+-			case 'd':
+-				dameonize = 0;
+-			break;
+-			case 't':
+-				save_time = 1;
+-			break;
+-			default:
+-				print_help(EXIT_FAILURE);
+-			break;
+-		}
+-	}
+-	
+-	queue = evf_io_queue_new();
+-
+-	if (queue == NULL) {
+-		msg_print(MSG_ERR, "malloc failed :(");
+-		exit(EXIT_FAILURE);
+-	}
+-
+-	add_input(MATRIX_KBD_DEV, queue, event_keyboard);
+-	add_input(GPIO_BTN_DEV, queue, event_gpio_btn);
+-	create_socket(queue);
+-
+-	if (dameonize) {
+-		daemon(0, 0);
+-		msg_set_output(MSG_SYSLOG);
+-	}
+-	
+-	signal(SIGINT,  sighandler);
+-	signal(SIGTERM, sighandler);
+-
+-	if (pid_save())
+-		exit(EXIT_FAILURE);
+-	
+-
+-	for (;;) {
+-		static struct timeval tv;
+-		tv.tv_sec = 30;
+-
+-		if (save_time)
+-			time_update();
+-	
+-		time(&before_select);
+-		evf_io_queue_wait(queue, &tv);
+-		
+-		if (closed && face_down && (power_on_ac() != 0x01) &&
+-		    (before_select - time(NULL) > 25))
+-			closed_time++;
+-
+-		if (closed && face_down) {
+-			backlight_is_off = 1;
+-			backlight_off();
+-		}
+-		
+-		if (backlight_is_off && !(closed && face_down)) {
+-			backlight_is_off = 0;
+-			backlight_on();
+-		}
+-
+-		if (closed_time == 10) {
+-			closed_time = 0;
+-			power_suspend();
+-		}
+-	}
+-}

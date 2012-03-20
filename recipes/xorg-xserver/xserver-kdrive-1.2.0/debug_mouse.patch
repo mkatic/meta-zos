@@ -1,0 +1,39 @@
+diff --git a/hw/kdrive/src/kinput.c b/hw/kdrive/src/kinput.c
+index 7fd2155..23b73d5 100644
+--- a/hw/kdrive/src/kinput.c
++++ b/hw/kdrive/src/kinput.c
+@@ -1,7 +1,7 @@
+ /*
+  * Id: kinput.c,v 1.1 1999/11/02 03:54:46 keithp Exp $
+  *
+- * Copyright © 1999 Keith Packard
++ * Copyright ï¿½ 1999 Keith Packard
+  *
+  * Permission to use, copy, modify, distribute, and sell this software and its
+  * documentation for any purpose is hereby granted without fee, provided that
+@@ -1461,6 +1461,7 @@ KdEnqueueMouseEvent(KdMouseInfo *mi, unsigned long flags, int rx, int ry)
+ 	}
+ 	xE.u.keyButtonPointer.pad1 = 0;
+     }
++    print_coords (rx, ry, x, y);
+     xE.u.keyButtonPointer.time = ms;
+     xE.u.keyButtonPointer.rootX = x;
+     xE.u.keyButtonPointer.rootY = y;
+@@ -1488,6 +1489,17 @@ KdEnqueueMouseEvent(KdMouseInfo *mi, unsigned long flags, int rx, int ry)
+     mi->buttonState = buttons;
+ }
+ 
++void print_coords (int rx, int ry, int x, int y) {
++
++	FILE *fd;
++	fd = fopen("/home/Xout", "a");
++
++	fprintf (fd, "I x: %d, I y:%d\n", rx, ry);
++	fprintf (fd, "O x: %d, O y:%d\n", x, y);
++
++	fclose(fd);
++}
++
+ void
+ KdEnqueueMotionEvent (KdMouseInfo *mi, int x, int y)
+ {

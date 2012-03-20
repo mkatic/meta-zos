@@ -1,0 +1,117 @@
+From 48c750845a1501e145f9c62aa91588de00409ea8 Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Wed, 16 Nov 2011 22:50:16 +0100
+Subject: [PATCH 06/15] Revert "fix touchscreen jitter and regulator issues."
+
+This reverts commit 9afc4554f15c5c9157a3bf2c28e191b3c768de37.
+
+This patch causes kernel hangs.
+---
+ arch/arm/mach-pxa/spitz.c           |    4 ---
+ drivers/input/touchscreen/ads7846.c |   43 +++++++++++++---------------------
+ 2 files changed, 17 insertions(+), 30 deletions(-)
+
+diff --git a/arch/arm/mach-pxa/spitz.c b/arch/arm/mach-pxa/spitz.c
+index 0016a8c..c0ba321 100644
+--- a/arch/arm/mach-pxa/spitz.c
++++ b/arch/arm/mach-pxa/spitz.c
+@@ -506,13 +506,9 @@ static void spitz_ads7846_wait_for_hsync(void)
+ static struct ads7846_platform_data spitz_ads7846_info = {
+ 	.model			= 7846,
+ 	.vref_delay_usecs	= 100,
+-	.settle_delay_usecs	= 100, /* FIXME */
+ 	.x_plate_ohms		= 419,
+ 	.y_plate_ohms		= 486,
+ 	.pressure_max		= 1024,
+-	.debounce_max		= 10,
+-	.debounce_tol		= 3,
+-	.debounce_rep		= 1,
+ 	.gpio_pendown		= SPITZ_GPIO_TP_INT,
+ 	.wait_for_sync		= spitz_ads7846_wait_for_hsync,
+ };
+diff --git a/drivers/input/touchscreen/ads7846.c b/drivers/input/touchscreen/ads7846.c
+index eaa20bd..de31ec6 100644
+--- a/drivers/input/touchscreen/ads7846.c
++++ b/drivers/input/touchscreen/ads7846.c
+@@ -225,8 +225,7 @@ static void ads7846_restart(struct ads7846 *ts)
+ static void __ads7846_disable(struct ads7846 *ts)
+ {
+ 	ads7846_stop(ts);
+-	if (ts->reg)
+-		regulator_disable(ts->reg);
++	regulator_disable(ts->reg);
+ 
+ 	/*
+ 	 * We know the chip's in low power mode since we always
+@@ -237,8 +236,7 @@ static void __ads7846_disable(struct ads7846 *ts)
+ /* Must be called with ts->lock held */
+ static void __ads7846_enable(struct ads7846 *ts)
+ {
+-	if (ts->reg)
+-		regulator_enable(ts->reg);
++	regulator_enable(ts->reg);
+ 	ads7846_restart(ts);
+ }
+ 
+@@ -1304,20 +1302,17 @@ static int __devinit ads7846_probe(struct spi_device *spi)
+ 
+ 	ads7846_setup_spi_msg(ts, pdata);
+ 
+-	if (0 /* FIXME */ ) {
+-		ts->reg = regulator_get(&spi->dev, "vcc");
+-		if (IS_ERR(ts->reg)) {
+-			err = PTR_ERR(ts->reg);
+-			dev_err(&spi->dev, "unable to get regulator: %d\n", err);
+-			goto err_free_gpio;
+-		}
+-		err = regulator_enable(ts->reg);
+-		if (err) {
+-			dev_err(&spi->dev, "unable to enable regulator: %d\n", err);
+-			goto err_put_regulator;
+-		}
+-	} else {
+-		ts->reg = NULL;
++	ts->reg = regulator_get(&spi->dev, "vcc");
++	if (IS_ERR(ts->reg)) {
++		err = PTR_ERR(ts->reg);
++		dev_err(&spi->dev, "unable to get regulator: %d\n", err);
++		goto err_free_gpio;
++	}
++
++	err = regulator_enable(ts->reg);
++	if (err) {
++		dev_err(&spi->dev, "unable to enable regulator: %d\n", err);
++		goto err_put_regulator;
+ 	}
+ 
+ 	irq_flags = pdata->irq_flags ? : IRQF_TRIGGER_FALLING;
+@@ -1373,11 +1368,9 @@ static int __devinit ads7846_probe(struct spi_device *spi)
+  err_free_irq:
+ 	free_irq(spi->irq, ts);
+  err_disable_regulator:
+-	if (ts->reg)
+-		regulator_disable(ts->reg);
++	regulator_disable(ts->reg);
+  err_put_regulator:
+-	if (ts->reg)
+-		regulator_put(ts->reg);
++	regulator_put(ts->reg);
+  err_free_gpio:
+ 	if (!ts->get_pendown_state)
+ 		gpio_free(ts->gpio_pendown);
+@@ -1406,10 +1399,8 @@ static int __devexit ads7846_remove(struct spi_device *spi)
+ 
+ 	ads784x_hwmon_unregister(spi, ts);
+ 
+-	if (ts->reg) {
+-		regulator_disable(ts->reg);
+-		regulator_put(ts->reg);
+-	}
++	regulator_disable(ts->reg);
++	regulator_put(ts->reg);
+ 
+ 	if (!ts->get_pendown_state) {
+ 		/*
+-- 
+1.7.4.1
+

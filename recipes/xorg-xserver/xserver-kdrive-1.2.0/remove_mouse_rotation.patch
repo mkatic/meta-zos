@@ -1,0 +1,39 @@
+diff --git a/hw/kdrive/src/kinput.c b/hw/kdrive/src/kinput.c
+index 7fd2155..29c3990 100644
+--- a/hw/kdrive/src/kinput.c
++++ b/hw/kdrive/src/kinput.c
+@@ -1,7 +1,7 @@
+ /*
+  * Id: kinput.c,v 1.1 1999/11/02 03:54:46 keithp Exp $
+  *
+- * Copyright © 1999 Keith Packard
++ * Copyright ï¿½ 1999 Keith Packard
+  *
+  * Permission to use, copy, modify, distribute, and sell this software and its
+  * documentation for any purpose is hereby granted without fee, provided that
+@@ -1432,20 +1432,13 @@ KdEnqueueMouseEvent(KdMouseInfo *mi, unsigned long flags, int rx, int ry)
+     
+     ms = GetTimeInMillis();
+     
+-    if (flags & KD_MOUSE_DELTA)
+-    {
+-	if (mi->transformCoordinates)
+-	{
+-	    x = matrix[0][0] * rx + matrix[0][1] * ry;
+-	    y = matrix[1][0] * rx + matrix[1][1] * ry;
+-	}
+-	else
+-	{
++    if (flags & KD_MOUSE_DELTA) {
++
+ 	    x = rx;
+ 	    y = ry;
+-	}
+-	KdMouseAccelerate (pKdPointer, &x, &y);
+-	xE.u.keyButtonPointer.pad1 = 1;
++
++	    KdMouseAccelerate (pKdPointer, &x, &y);
++	    xE.u.keyButtonPointer.pad1 = 1;
+     }
+     else
+     {

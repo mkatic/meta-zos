@@ -1,0 +1,13 @@
+Index: awesome-3.4.11/awesomeConfig.cmake
+===================================================================
+--- awesome-3.4.11.orig/awesomeConfig.cmake	2012-03-14 23:40:31.000000000 +0100
++++ awesome-3.4.11/awesomeConfig.cmake	2012-03-14 23:41:23.000000000 +0100
+@@ -10,7 +10,7 @@
+ 
+ set(CMAKE_BUILD_TYPE RELEASE)
+ 
+-option(WITH_DBUS "build with D-BUS" ON)
++option(WITH_DBUS "build with D-BUS" OFF)
+ option(GENERATE_MANPAGES "generate manpages" ON)
+ option(COMPRESS_MANPAGES "compress manpages" ON)
+ option(GENERATE_LUADOC "generate luadoc" ON)

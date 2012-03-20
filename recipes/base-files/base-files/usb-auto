@@ -1,0 +1,33 @@
+#!/bin/sh
+
+if test -z "$CLIENT_MODULE" ; then
+# Uncomment client module you want by default (only one at a time is possible in 2.6.26RP):
+       CLIENT_MODULE=g_ether
+       #CLIENT_MODULE=g_file_storage
+fi
+
+if test `pxaregs GPLR1_41 | sed -n 's/.*\(.\)  GPIO.*/\1/p'` = 0 ; then
+       echo "Host cable is present."
+       pxaregs GPSR1_37 1 # Turn on USB power
+       rmmod g_file_storage g_ether pxa27x_udc 2>/dev/null
+       sleep 1
+       modprobe ohci-hcd 2>/dev/null
+else
+       pxaregs GPCR1_37 1 # Turn off USB power
+       sleep 1 # Wait a bit to discharge capacitors
+       if test `pxaregs GPLR1_35 | sed -n 's/.*\(.\)  GPIO.*/\1/p'` = 0 ; then
+               echo "No cable in USB."
+               ifdown usb0 2>/dev/null
+               sleep 1
+               rmmod g_file_storage g_ether pxa27x_udc 2>/dev/null
+               sleep 1
+               rmmod ohci-hcd 2>/dev/null
+       else
+               echo "Client cable is present."
+               rmmod ohci-hcd 2>/dev/null
+               sleep 1
+               modprobe pxa27x_udc
+               modprobe $CLIENT_MODULE
+               ifup usb0 2>/dev/null
+       fi
+fi

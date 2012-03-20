@@ -1,0 +1,186 @@
+commit cb724ea3b826cb174bbca985629e1ae8c1b68e2a
+Author: Marko Katic <dromede.gmail.com>
+Date:   Sat Feb 11 16:38:38 2012 +0100
+
+    More changes to legacy headers.
+
+diff --git a/hw/xfree86/common/xf86.h b/hw/xfree86/common/xf86.h
+index 5112530..2c38d96 100644
+--- a/hw/xfree86/common/xf86.h
++++ b/hw/xfree86/common/xf86.h
+@@ -47,7 +47,7 @@
+ #include <X11/Xfuncproto.h>
+ #include <stdarg.h>
+ #ifdef RANDR
+-#include <X11/extensions/randr.h>
++#include <X11/extensions/legacy/randr.h>
+ #endif
+ 
+ #include "propertyst.h"
+ 
+diff --git a/randr/randrstr.h b/randr/randrstr.h
+index 6deaf47..cc3ac60 100644
+--- a/randr/randrstr.h
++++ b/randr/randrstr.h
+@@ -43,8 +43,8 @@
+ #include "pixmapstr.h"
+ #include "extnsionst.h"
+ #include "servermd.h"
+-#include <X11/extensions/randr.h>
+-#include <X11/extensions/randrproto.h>
++#include <X11/extensions/legacy/randr.h>
++#include <X11/extensions/legacy/randrproto.h>
+ #ifdef RENDER
+ #include <X11/extensions/render.h> 	/* we share subpixel order information */
+ #include "picturestr.h"
+commit 23cd5a754697bb43a04a686cf1c2da2711a4254c
+Author: Marko Katic <dromede.gmail.com>
+Date:   Fri Feb 10 17:51:23 2012 +0100
+
+    Change legacy headers location.
+
+diff --git a/Xext/appgroup.c b/Xext/appgroup.c
+index 650dc0a..82c7efa 100644
+--- a/Xext/appgroup.c
++++ b/Xext/appgroup.c
+@@ -40,7 +40,7 @@ from The Open Group.
+ #include "colormapst.h"
+ #include "servermd.h"
+ #define _XAG_SERVER_
+-#include <X11/extensions/Xagstr.h>
++#include <X11/extensions/legacy/Xagstr.h>
+ #include "xacestr.h"
+ #include "securitysrv.h"
+ #include <X11/Xfuncproto.h>
+diff --git a/Xext/mitmisc.c b/Xext/mitmisc.c
+index 924b880..02cbe62 100644
+--- a/Xext/mitmisc.c
++++ b/Xext/mitmisc.c
+@@ -39,7 +39,7 @@ in this Software without prior written authorization from The Open Group.
+ #include "dixstruct.h"
+ #include "extnsionst.h"
+ #define _MITMISC_SERVER_
+-#include <X11/extensions/mitmiscstr.h>
++#include <X11/extensions/legacy/mitmiscstr.h>
+ #include "modinit.h"
+ 
+ #if 0
+diff --git a/Xext/security.c b/Xext/security.c
+index ac76279..8ad674f 100644
+--- a/Xext/security.c
++++ b/Xext/security.c
+@@ -38,7 +38,7 @@ in this Software without prior written authorization from The Open Group.
+ #include "propertyst.h"
+ #include "xacestr.h"
+ #include "securitysrv.h"
+-#include <X11/extensions/securstr.h>
++#include <X11/extensions/legacy/securstr.h>
+ #include <assert.h>
+ #include <stdarg.h>
+ #ifdef XAPPGROUP
+diff --git a/Xext/xtest.c b/Xext/xtest.c
+index 83f8b8c..92862a4 100644
+--- a/Xext/xtest.c
++++ b/Xext/xtest.c
+@@ -43,8 +43,8 @@ from The Open Group.
+ #include "dixevents.h"
+ #include "sleepuntil.h"
+ #define _XTEST_SERVER_
+-#include <X11/extensions/XTest.h>
+-#include <X11/extensions/xteststr.h>
++#include <X11/extensions/legacy/XTest.h>
++#include <X11/extensions/legacy/xteststr.h>
+ #ifdef XINPUT
+ #include <X11/extensions/XI.h>
+ #include <X11/extensions/XIproto.h>
+diff --git a/dbe/dbestruct.h b/dbe/dbestruct.h
+index 460cc75..314765a 100644
+--- a/dbe/dbestruct.h
++++ b/dbe/dbestruct.h
+@@ -38,7 +38,7 @@
+ /* INCLUDES */
+ 
+ #define NEED_DBE_PROTOCOL
+-#include <X11/extensions/Xdbeproto.h>
++#include <X11/extensions/legacy/Xdbeproto.h>
+ #include "windowstr.h"
+ 
+ 
+diff --git a/hw/dmx/examples/xtest.c b/hw/dmx/examples/xtest.c
+index b6f223d..11087ed 100644
+--- a/hw/dmx/examples/xtest.c
++++ b/hw/dmx/examples/xtest.c
+@@ -35,7 +35,7 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <X11/Xlib.h>
+-#include <X11/extensions/XTest.h>
++#include <X11/extensions/legacy/XTest.h>
+ 
+ int main(int argc, char **argv)
+ {
+diff --git a/hw/xfree86/dixmods/extmod/modinit.h b/hw/xfree86/dixmods/extmod/modinit.h
+index 41f060b..db0d3a7 100644
+--- a/hw/xfree86/dixmods/extmod/modinit.h
++++ b/hw/xfree86/dixmods/extmod/modinit.h
+@@ -21,14 +21,14 @@ extern void MultibufferExtensionInit(INITARGS);
+ #ifdef MITMISC
+ extern void MITMiscExtensionInit(INITARGS);
+ #define _MITMISC_SERVER_
+-#include <X11/extensions/mitmiscstr.h>
++#include <X11/extensions/legacy/mitmiscstr.h>
+ #endif
+ 
+ #ifdef XTEST
+ extern void XTestExtensionInit(INITARGS);
+ #define _XTEST_SERVER_
+-#include <X11/extensions/XTest.h>
+-#include <X11/extensions/xteststr.h>
++#include <X11/extensions/legacy/XTest.h>
++#include <X11/extensions/legacy/xteststr.h>
+ #endif
+ 
+ #if 1
+diff --git a/hw/xwin/winauth.c b/hw/xwin/winauth.c
+index b57a35a..179c956 100644
+--- a/hw/xwin/winauth.c
++++ b/hw/xwin/winauth.c
+@@ -37,7 +37,7 @@
+ /* Includes for authorization */
+ #include <X11/Xauth.h>
+ #include "securitysrv.h"
+-#include <X11/extensions/securstr.h>
++#include <X11/extensions/legacy/securstr.h>
+ 
+ 
+ /*
+diff --git a/mi/miinitext.c b/mi/miinitext.c
+index 06e4242..eef95a6 100644
+--- a/mi/miinitext.c
++++ b/mi/miinitext.c
+@@ -229,7 +229,7 @@ typedef void (*InitExtension)(INITARGS);
+ #endif
+ #ifdef XTEST
+ #define _XTEST_SERVER_
+-#include <X11/extensions/XTest.h>
++#include <X11/extensions/legacy/XTest.h>
+ #endif
+ #ifdef XKB
+ #include <X11/extensions/XKB.h>
+@@ -239,14 +239,14 @@ typedef void (*InitExtension)(INITARGS);
+ #endif
+ #ifdef XAPPGROUP
+ #define _XAG_SERVER_
+-#include <X11/extensions/Xagstr.h>
++#include <X11/extensions/legacy/Xagstr.h>
+ #endif
+ #ifdef XACE
+ #include "xace.h"
+ #endif
+ #ifdef XCSECURITY
+ #include "securitysrv.h"
+-#include <X11/extensions/securstr.h>
++#include <X11/extensions/legacy/securstr.h>
+ #endif
+ #ifdef PANORAMIX
+ #include <X11/extensions/panoramiXproto.h>

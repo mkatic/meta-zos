@@ -1,0 +1,38 @@
+commit 46da9fc164668b54df459de1576857ce7e991b65
+Author: Marko Katic <dromede.gmail.com>
+Date:   Wed Oct 5 23:33:17 2011 +0200
+
+    fix tslib rotation.
+
+diff --git a/src/video/fbcon/SDL_fbevents.c b/src/video/fbcon/SDL_fbevents.c
+index b3d56d0..9322fc7 100644
+--- a/src/video/fbcon/SDL_fbevents.c
++++ b/src/video/fbcon/SDL_fbevents.c
+@@ -55,6 +55,8 @@
+ #define GPM_NODE_FIFO	"/dev/gpmdata"
+ #endif
+ 
++char *tslib_rotation;
++
+ /*#define DEBUG_KEYBOARD*/
+ /*#define DEBUG_MOUSE*/
+ 
+@@ -550,6 +552,7 @@ int FB_OpenMouse(_THIS)
+ 	mouse_fd = -1;
+ 
+ #if SDL_INPUT_TSLIB
++	tslib_rotation = getenv("SDL_VIDEO_FBCON_ROTATION");
+ 	if ( mousedrv && (SDL_strcmp(mousedrv, "TSLIB") == 0) ) {
+ 		if (mousedev == NULL) mousedev = SDL_getenv("TSLIB_TSDEVICE");
+ 		if (mousedev != NULL) {
+@@ -746,6 +749,10 @@ static void handle_tslib(_THIS)
+ 	while (ts_read(ts_dev, &sample, 1) > 0) {
+ 		button = (sample.pressure > 0) ? 1 : 0;
+ 		button <<= 2;	/* must report it as button 3 */
++		if (strcmp(tslib_rotation, "CW") == 0) {
++			FB_vgamousecallback(button, 0, sample.y, (SDL_VideoSurface->h - sample.x));
++			return;
++		}
+ 		FB_vgamousecallback(button, 0, sample.x, sample.y);
+ 	}
+ 	return;

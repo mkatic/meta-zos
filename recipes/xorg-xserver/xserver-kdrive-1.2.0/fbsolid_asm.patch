@@ -1,0 +1,120 @@
+commit 12f9d2eee7ca76bdeaafd398bc186dd54c5a77e4
+Author: Marko Katic <dromede.gmail.com>
+Date:   Sun Aug 7 20:03:41 2011 +0200
+
+    add asm optimised fbSolid from Maemo.
+
+diff --git a/fb/fbsolid.c b/fb/fbsolid.c
+index 89effe6..5ccddf4 100644
+--- a/fb/fbsolid.c
++++ b/fb/fbsolid.c
+@@ -30,6 +30,47 @@
+ 
+ #include "fb.h"
+ 
++static inline void memset_fbbits(FbBits *dst, FbBits xc, int count)
++{
++    if (sizeof(FbBits) != 4) {
++        while (count--) *dst++ = xc;
++        return;
++    }
++
++    FbBits dummy0, dummy1, dummy2;
++    __asm__ __volatile__ (
++        "      cmp   %[count], #4\n"
++        "      blt   2f\n"
++        /* Alignment is known to be at least 32-bit */
++        "      mov   %[dummy0], %[xxc]\n"
++        "      tst   %[dst], #4\n"
++        "      strne %[xxc], [%[dst]], #4\n"
++        "      subne %[count], %[count], #1\n"
++        "      tst   %[dst], #8\n"
++        "      stmneia %[dst]!, {%[dummy0], %[xxc]}\n"
++        "      subne %[count], %[count], #2\n"
++        /* Now we are 128-bit aligned */
++        "      mov   %[dummy1], %[xxc]\n"
++        "      mov   %[dummy2], %[xxc]\n"
++        "1:\n" /* Copy 4 32-bit values per loop iteration */
++        "      subs  %[count], %[count], #4\n"
++        "      stmgeia %[dst]!, {%[dummy0], %[dummy1], %[dummy2], %[xxc]}\n"
++        "      bge   1b\n"
++        "      add   %[count], %[count], #4\n"
++        "2:\n" /* Copy up to 3 remaining 32-bit values */
++        "      subs  %[count], %[count], #1\n"
++        "      strge %[xxc], [%[dst]], #4\n"
++        "      subs  %[count], %[count], #1\n"
++        "      strge %[xxc], [%[dst]], #4\n"
++        "      subs  %[count], %[count], #1\n"
++        "      strge %[xxc], [%[dst]], #4\n"
++        "\n"
++        : [dst] "+&r" (dst), [count] "+&r" (count), [dummy0] "=&r" (dummy0), [dummy1] "=&r" (dummy1), [dummy2] "=&r" (dummy2), [xxc] "+&r" (xc)
++        :
++        : "cc", "memory"
++    );
++}
++
+ void
+ fbSolid (FbBits	    *dst,
+ 	 FbStride   dstStride,
+@@ -57,29 +98,39 @@ fbSolid (FbBits	    *dst,
+     dstX &= FB_MASK;
+     FbMaskBitsBytes(dstX, width, and == 0, startmask, startbyte, 
+ 		    nmiddle, endmask, endbyte);
+-    if (startmask)
+-	dstStride--;
+-    dstStride -= nmiddle;
+-    while (height--)
+-    {
+-	if (startmask)
+-	{
+-	    FbDoLeftMaskByteRRop(dst,startbyte,startmask,and,xor);
+-	    dst++;
+-	}
+-	n = nmiddle;
+-	if (!and)
+-	    while (n--)
+-		*dst++ = xor;
+-	else
+-	    while (n--)
+-	    {
+-		*dst = FbDoRRop (*dst, and, xor);
+-		dst++;
+-	    }
+-	if (endmask)
+-	    FbDoRightMaskByteRRop(dst,endbyte,endmask,and,xor);
+-	dst += dstStride;
++    if (!startmask && !and && !endmask) {
++        while (height--) {
++            memset_fbbits(dst, xor, nmiddle);
++            dst += dstStride;
++        }
++    }
++    else {
++        if (startmask)
++            dstStride--;
++        dstStride -= nmiddle;
++        while (height--)
++        {
++            if (startmask)
++            {
++                FbDoLeftMaskByteRRop(dst,startbyte,startmask,and,xor);
++                dst++;
++            }
++            n = nmiddle;
++            if (!and) {
++                memset_fbbits(dst, xor, n);
++                dst += n;
++            }
++            else {
++                while (n--)
++                {
++                    *dst = FbDoRRop (*dst, and, xor);
++                    dst++;
++                }
++            }
++            if (endmask)
++                FbDoRightMaskByteRRop(dst,endbyte,endmask,and,xor);
++            dst += dstStride;
++        }
+     }
+ }

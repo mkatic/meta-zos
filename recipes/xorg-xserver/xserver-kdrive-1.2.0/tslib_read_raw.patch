@@ -1,0 +1,102 @@
+diff --git a/hw/kdrive/linux/tslib.c b/hw/kdrive/linux/tslib.c
+index c4caff9..75b06bb 100644
+--- a/hw/kdrive/linux/tslib.c
++++ b/hw/kdrive/linux/tslib.c
+@@ -4,10 +4,10 @@
+  * Derived from ts.c by Keith Packard
+  * Derived from ps2.c by Jim Gettys
+  *
+- * Copyright © 1999 Keith Packard
+- * Copyright © 2000 Compaq Computer Corporation
+- * Copyright © 2002 MontaVista Software Inc.
+- * Copyright © 2005 OpenedHand Ltd.
++ * Copyright ï¿½ 1999 Keith Packard
++ * Copyright ï¿½ 2000 Compaq Computer Corporation
++ * Copyright ï¿½ 2002 MontaVista Software Inc.
++ * Copyright ï¿½ 2005 OpenedHand Ltd.
+  * 
+  * Permission to use, copy, modify, distribute, and sell this software and its
+  * documentation for any purpose is hereby granted without fee, provided that
+@@ -79,19 +79,46 @@
+ #include <tslib.h>
+ 
+ static struct tsdev *tsDev = NULL;
+-
++static int cal_const [7];
+ static char *TsNames[] = {
+   NULL, 			/* set via TSLIB_TSDEVICE */
+   "/dev/ts",	
+   "/dev/touchscreen/0",
+ };
+ 
++void get_calibration_constants (int *);
++
+ #define NUM_TS_NAMES (sizeof (TsNames) / sizeof (TsNames[0]))
+ 
+ /* For XCalibrate extension */
+ void (*tslib_raw_event_hook)(int x, int y, int pressure, void *closure);
+ void *tslib_raw_event_closure;
+ 
++void get_calibration_constants(int *cal_const) {
++	struct stat sbuf;
++	int pcal_fd;
++	char pcalbuf[200];
++	int index;
++	char *tokptr;
++	char *calfile=NULL;
++	char *defaultcalfile = "/etc/pointercal";
++
++	if( (calfile = getenv("TSLIB_CALIBFILE")) == NULL) calfile = defaultcalfile;
++	if(stat(calfile,&sbuf)==0) {
++		pcal_fd = open(calfile,O_RDONLY);
++		read(pcal_fd,pcalbuf,200);
++		cal_const[0] = atoi(strtok(pcalbuf," "));
++		index=1;
++		while(index<7) {
++			tokptr = strtok(NULL," ");
++			if(*tokptr!='\0') {
++				cal_const[index] = atoi(tokptr);
++				index++;
++			}
++		}
++	}
++}
++
+ int TsInputType = 0;
+ int KdTsPhyScreen = 0; 		/* XXX Togo .. */
+ 
+@@ -102,6 +129,8 @@ TsRead (int tsPort, void *closure)
+     struct ts_sample event;
+     long	    x, y;
+     unsigned long   flags;
++    /*calibration constants */
++    int a[7]={37, -8961, 33606232, 12473, 252, -3803356, 65536};
+ 
+     if (tslib_raw_event_hook)
+       {
+@@ -116,11 +145,13 @@ TsRead (int tsPort, void *closure)
+ 	return;
+       }
+ 
+-    while (ts_read(tsDev, &event, 1) == 1)
++    while (ts_read_raw(tsDev, &event, 1) == 1)
+       {
+ 	flags = (event.pressure) ? KD_BUTTON_1 : 0;
+-	x = event.x;
+-	y = event.y;
++
++	/*linearly scale raw absolute values */
++	x = ( cal_const[2] + cal_const[0]*event.x + cal_const[1]*event.y ) / a[6];
++	y = ( cal_const[5] + cal_const[3]*event.x + cal_const[4]*event.y ) / a[6];
+ 	
+ 	KdEnqueueMouseEvent (mi, flags, x, y);
+       }
+@@ -206,7 +237,7 @@ TslibInit (void)
+ 	{
+ 	  mi->driver    = (void *) fd;
+ 	  mi->inputType = TsInputType;
+-	  
++	  get_calibration_constants (cal_const);
+ 	  KdRegisterFd (TsInputType, fd, TsRead, (void *) mi);
+ 	  
+ 	  /* Set callbacks for vt switches etc */

@@ -1,0 +1,125 @@
+Index: xorg-server-1.2.0/hw/kdrive/linux/tslib.c
+===================================================================
+--- xorg-server-1.2.0.orig/hw/kdrive/linux/tslib.c	2007-01-23 06:39:15.000000000 +0100
++++ xorg-server-1.2.0/hw/kdrive/linux/tslib.c	2012-03-09 19:22:55.000000000 +0100
+@@ -4,10 +4,10 @@
+  * Derived from ts.c by Keith Packard
+  * Derived from ps2.c by Jim Gettys
+  *
+- * Copyright © 1999 Keith Packard
+- * Copyright © 2000 Compaq Computer Corporation
+- * Copyright © 2002 MontaVista Software Inc.
+- * Copyright © 2005 OpenedHand Ltd.
++ * Copyright ï¿½ 1999 Keith Packard
++ * Copyright ï¿½ 2000 Compaq Computer Corporation
++ * Copyright ï¿½ 2002 MontaVista Software Inc.
++ * Copyright ï¿½ 2005 OpenedHand Ltd.
+  * 
+  * Permission to use, copy, modify, distribute, and sell this software and its
+  * documentation for any purpose is hereby granted without fee, provided that
+@@ -79,13 +79,18 @@
+ #include <tslib.h>
+ 
+ static struct tsdev *tsDev = NULL;
+-
++static int mwheel_emu_state;
+ static char *TsNames[] = {
+   NULL, 			/* set via TSLIB_TSDEVICE */
+   "/dev/ts",	
+   "/dev/touchscreen/0",
+ };
+ 
++enum {
++	MWHEEL_EMU_NOT_RUNNING,
++	MWHEEL_EMU_RUNNING,
++};
++
+ #define NUM_TS_NAMES (sizeof (TsNames) / sizeof (TsNames[0]))
+ 
+ /* For XCalibrate extension */
+@@ -101,6 +106,7 @@
+     KdMouseInfo	    *mi = closure;
+     struct ts_sample event;
+     long	    x, y;
++    static long prev_x, prev_y;
+     unsigned long   flags;
+ 
+     if (tslib_raw_event_hook)
+@@ -116,14 +122,70 @@
+ 	return;
+       }
+ 
+-    while (ts_read(tsDev, &event, 1) == 1)
+-      {
+-	flags = (event.pressure) ? KD_BUTTON_1 : 0;
+-	x = event.x;
+-	y = event.y;
++    while (ts_read(tsDev, &event, 1) == 1) {
++		if (event.y < 640) {
++			x = event.x;
++			y = event.y;
++
++			flags = (event.pressure) ? KD_BUTTON_1 : 0;
++			KdEnqueueMouseEvent(mi, flags, x, y);
++
++			mwheel_emu_state = MWHEEL_EMU_NOT_RUNNING;
++			prev_x = event.x;
++			prev_y = event.y;
++
++		} else {
++			if (event.pressure)
++				run_mwheel_emu(mi, &event, prev_x, prev_y);
++			else {
++				flags = 0;
++			//	KdEnqueueMouseEvent(mi, flags, x, y);
++				mwheel_emu_state = MWHEEL_EMU_NOT_RUNNING;
++			}
++		}
++	}
++}
++
++void run_mwheel_emu (KdMouseInfo *mi, struct ts_sample *event, long prev_x, long prev_y) {
++
++#define MWHEEL_STEP 20
++#define RIGHT_MOUSE_BTN 400 /* value greater than this y value will generate KD_BUTTON_3 */
++	static unsigned long start_x;
++	signed long delta_x;
++	unsigned long flags;
+ 	
+-	KdEnqueueMouseEvent (mi, flags, x, y);
+-      }
++	if (event->x > RIGHT_MOUSE_BTN) { /*right mouse button mapped to upper right corner. */
++	flags = KD_BUTTON_3;
++	KdEnqueueMouseEvent(mi, flags, prev_x, prev_y);
++	flags &= ~KD_BUTTON_3;
++	KdEnqueueMouseEvent(mi, flags, prev_x, prev_y);
++	return;
++	}
++
++	if (mwheel_emu_state == MWHEEL_EMU_RUNNING) {
++		delta_x = start_x - event->x;
++			if (abs(delta_x) > MWHEEL_STEP) {
++				if (delta_x > 0) {
++					flags = KD_BUTTON_5;
++					KdEnqueueMouseEvent(mi, flags, prev_x, prev_y);
++					flags &= ~KD_BUTTON_5;
++					KdEnqueueMouseEvent(mi, flags, prev_x, prev_y);
++				}
++				else {
++					flags = KD_BUTTON_4;
++					KdEnqueueMouseEvent(mi, flags, prev_x, prev_y);
++					flags &= ~KD_BUTTON_4;
++					KdEnqueueMouseEvent(mi, flags, prev_x, prev_y);
++				}
++			start_x = event->x;
++			}
++
++	}
++	else {
++		mwheel_emu_state = MWHEEL_EMU_RUNNING;
++		start_x = event->x;
++	}
++
+ }
+ 
+ static int

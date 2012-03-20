@@ -1,0 +1,19 @@
+mode "QVGA"
+geometry 240 320 240 320 16
+timings 134617 20 46 1 0 20 2
+accel false
+endmode
+
+mode "480x640-117"
+# D: 51.999 MHz, H: 75.252 kHz, V: 116.851 Hz
+geometry 480 640 480 640 16
+timings 19231 46 125 1 0 40 3
+accel false
+endmode
+
+mode "VGA"
+# D: 51.999 MHz, H: 75.252 kHz, V: 116.851 Hz
+geometry 480 640 480 640 16
+timings 19231 46 125 1 0 40 3
+accel false
+endmode

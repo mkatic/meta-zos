@@ -1,0 +1,21 @@
+Index: awesome-3.4.11/awesomeConfig.cmake
+===================================================================
+--- awesome-3.4.11.orig/awesomeConfig.cmake	2012-03-11 19:56:44.000000000 +0100
++++ awesome-3.4.11/awesomeConfig.cmake	2012-03-11 19:57:22.000000000 +0100
+@@ -163,6 +163,8 @@
+ # Check for libev
+ a_find_library(LIB_EV ev)
+ 
++
++a_find_library(LIB_DL dl)
+ # Check for backtrace_symbols()
+ include(CheckFunctionExists)
+ check_function_exists(backtrace_symbols HAS_EXECINFO)
+@@ -200,6 +202,7 @@
+     ${AWESOME_COMMON_REQUIRED_LDFLAGS}
+     ${AWESOME_REQUIRED_LDFLAGS}
+     ${LIB_EV}
++    ${LIB_DL}
+     ${LUA_LIBRARIES})
+ 
+ set(AWESOME_REQUIRED_INCLUDE_DIRS

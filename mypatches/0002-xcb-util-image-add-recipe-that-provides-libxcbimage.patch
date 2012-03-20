@@ -1,0 +1,31 @@
+From 1fe88266f42a4a94c286b631de726de60daba0b2 Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Fri, 16 Mar 2012 00:06:48 +0100
+Subject: [PATCH 2/5] xcb-util-image: Add recipe that provides libxcb-image.
+
+Xcb-util was split into separate packages in the 0.3.6 -> 0.3.8 transition.
+This library was previously provided by xcb-util and is now a separate package.
+---
+ meta/recipes-graphics/xcb/xcb-util-image_0.3.8.bb |   10 ++++++++++
+ 1 files changed, 10 insertions(+), 0 deletions(-)
+ create mode 100644 meta/recipes-graphics/xcb/xcb-util-image_0.3.8.bb
+
+diff --git a/meta/recipes-graphics/xcb/xcb-util-image_0.3.8.bb b/meta/recipes-graphics/xcb/xcb-util-image_0.3.8.bb
+new file mode 100644
+index 0000000..2fb350e
+--- /dev/null
++++ b/meta/recipes-graphics/xcb/xcb-util-image_0.3.8.bb
+@@ -0,0 +1,10 @@
++require xcb-util.inc
++
++LICENSE = "MIT"
++LIC_FILES_CHKSUM = "file://image/xcb_image.c;endline=24;md5=eafdf965cfb89955fdedf75054223fb4 \
++                    file://image/xcb_image.h;startline=4;endline=27;md5=4e4f1b0fae5694beed407dea01f38212"
++PR = "r0"
++
++SRC_URI[md5sum] = "245a96041f373b05764148e52d2e0211"
++SRC_URI[sha256sum] = "40390528c26e8231132540f16579b821de68bb2e9152918f72182d5a4038a6d9"
++
+-- 
+1.7.4.1
+

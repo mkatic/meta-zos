@@ -1,0 +1,201 @@
+commit 577acb8f05e11eb64a5466a418359a4a38a12434
+Author: Marko Katic <dromede.gmail.com>
+Date:   Sun Aug 7 21:21:44 2011 +0200
+
+    Reduce fbSolid api and associated calls.
+
+diff --git a/fb/fb.h b/fb/fb.h
+index 3742cf0..198c860 100644
+--- a/fb/fb.h
++++ b/fb/fb.h
+@@ -602,6 +602,14 @@ typedef struct {
+ 				     (pScreen)->devPrivates[fbGetScreenPrivateIndex()].ptr)
+ #endif
+ 
++typedef struct {
++	int dstX;
++	int	bpp;
++	int	width;
++	int height;
++	FbBits and;
++} fbsolid_args;
++
+ /* private field of GC */
+ typedef struct {
+ #ifdef FB_OLD_GC
+@@ -1827,13 +1835,7 @@ fbSegment (DrawablePtr	pDrawable,
+ void
+ fbSolid (FbBits	    *dst,
+ 	 FbStride   dstStride,
+-	 int	    dstX,
+-	 int	    bpp,
+-
+-	 int	    width,
+-	 int	    height,
+-
+-	 FbBits	    and,
++	 fbsolid_args *args,
+ 	 FbBits	    xor);
+ 
+ #ifdef FB_24BIT
+diff --git a/fb/fbfill.c b/fb/fbfill.c
+index ad5025c..807e86f 100644
+--- a/fb/fbfill.c
++++ b/fb/fbfill.c
+@@ -45,19 +45,25 @@ fbFill (DrawablePtr pDrawable,
+     
+     fbGetDrawable (pDrawable, dst, dstStride, dstBpp, dstXoff, dstYoff);
+ 
++	fbsolid_args args = {
++						.dstX = (x + dstXoff) * dstBpp,
++						.bpp = dstBpp,
++						.width = width * dstBpp,
++						.height = height,
++						.and = pPriv->and
++	};
++
+     switch (pGC->fillStyle) {
+     case FillSolid:
+ #ifdef USE_MMX
+ 	if (!pPriv->and && fbHaveMMX())
+ 	    if (fbSolidFillmmx (pDrawable, x, y, width, height, pPriv->xor))
+ 		return;
+-#endif	    
++#endif
++
+ 	fbSolid (dst + (y + dstYoff) * dstStride, 
+ 		 dstStride, 
+-		 (x + dstXoff) * dstBpp,
+-		 dstBpp,
+-		 width * dstBpp, height,
+-		 pPriv->and, pPriv->xor);
++		 &args, pPriv->xor);
+ 	break;
+     case FillStippled:
+     case FillOpaqueStippled: {
+@@ -219,13 +225,15 @@ fbSolidBoxClipped (DrawablePtr	pDrawable,
+ 			return;
+ 	}
+ #endif
++	fbsolid_args args = {
++						.dstX = (partX1 + dstXoff) * dstBpp,
++						.bpp = dstBpp,
++						.width = (partX2 - partX1) * dstBpp,
++						.height = (partY2 - partY1),
++						.and = and
++	};
+ 	fbSolid (dst + (partY1 + dstYoff) * dstStride,
+ 		 dstStride,
+-		 (partX1 + dstXoff) * dstBpp,
+-		 dstBpp,
+-
+-		 (partX2 - partX1) * dstBpp,
+-		 (partY2 - partY1),
+-		 and, xor);
++		 &args, xor);
+     }
+ }
+diff --git a/fb/fbsolid.c b/fb/fbsolid.c
+index 5ccddf4..27888bf 100644
+--- a/fb/fbsolid.c
++++ b/fb/fbsolid.c
+@@ -74,13 +74,7 @@ static inline void memset_fbbits(FbBits *dst, FbBits xc, int count)
+ void
+ fbSolid (FbBits	    *dst,
+ 	 FbStride   dstStride,
+-	 int	    dstX,
+-	 int	    bpp,
+-
+-	 int	    width,
+-	 int	    height,
+-
+-	 FbBits	    and,
++	 fbsolid_args *args,
+ 	 FbBits	    xor)
+ {
+     FbBits  startmask, endmask;
+@@ -88,18 +82,18 @@ fbSolid (FbBits	    *dst,
+     int	    startbyte, endbyte;
+ 
+ #ifdef FB_24BIT
+-    if (bpp == 24 && (!FbCheck24Pix(and) || !FbCheck24Pix(xor)))
++    if (args->bpp == 24 && (!FbCheck24Pix(and) || !FbCheck24Pix(xor)))
+     {
+-	fbSolid24 (dst, dstStride, dstX, width, height, and, xor);
++	fbSolid24 (dst, dstStride, args->dstX, args->width, args->height, args->and, xor);
+ 	return;
+     }
+ #endif
+-    dst += dstX >> FB_SHIFT;
+-    dstX &= FB_MASK;
+-    FbMaskBitsBytes(dstX, width, and == 0, startmask, startbyte, 
++    dst += args->dstX >> FB_SHIFT;
++    args->dstX &= FB_MASK;
++    FbMaskBitsBytes(args->dstX, args->width, args->and == 0, startmask, startbyte,
+ 		    nmiddle, endmask, endbyte);
+-    if (!startmask && !and && !endmask) {
+-        while (height--) {
++    if (!startmask && !args->and && !endmask) {
++        while (args->height--) {
+             memset_fbbits(dst, xor, nmiddle);
+             dst += dstStride;
+         }
+@@ -108,27 +102,27 @@ fbSolid (FbBits	    *dst,
+         if (startmask)
+             dstStride--;
+         dstStride -= nmiddle;
+-        while (height--)
++        while (args->height--)
+         {
+             if (startmask)
+             {
+-                FbDoLeftMaskByteRRop(dst,startbyte,startmask,and,xor);
++                FbDoLeftMaskByteRRop(dst,startbyte,startmask,args->and,xor);
+                 dst++;
+             }
+             n = nmiddle;
+-            if (!and) {
++            if (!args->and) {
+                 memset_fbbits(dst, xor, n);
+                 dst += n;
+             }
+             else {
+                 while (n--)
+                 {
+-                    *dst = FbDoRRop (*dst, and, xor);
++                    *dst = FbDoRRop (*dst, args->and, xor);
+                     dst++;
+                 }
+             }
+             if (endmask)
+-                FbDoRightMaskByteRRop(dst,endbyte,endmask,and,xor);
++                FbDoRightMaskByteRRop(dst,endbyte,endmask,args->and,xor);
+             dst += dstStride;
+         }
+     }
+diff --git a/fb/fbwindow.c b/fb/fbwindow.c
+index 968b5a6..b0068fa 100644
+--- a/fb/fbwindow.c
++++ b/fb/fbwindow.c
+@@ -236,13 +236,16 @@ fbFillRegionSolid (DrawablePtr	pDrawable,
+ 					(pbox->x2 - pbox->x1),
+ 					(pbox->y2 - pbox->y1), xor)) {
+ #endif
++        	fbsolid_args args = {
++        						.dstX = (pbox->x1 + dstXoff) * dstBpp,
++        						.bpp = dstBpp,
++        						.width = (pbox->x2 - pbox->x1) * dstBpp,
++        						.height = pbox->y2 - pbox->y1,
++        						.and = and
++        	};
+ 	fbSolid (dst + (pbox->y1 + dstYoff) * dstStride,
+ 		 dstStride,
+-		 (pbox->x1 + dstXoff) * dstBpp,
+-		 dstBpp,
+-		 (pbox->x2 - pbox->x1) * dstBpp,
+-		 pbox->y2 - pbox->y1,
+-		 and, xor);
++		 &args, xor);
+ #ifdef USE_MMX
+ 	}
+ #endif

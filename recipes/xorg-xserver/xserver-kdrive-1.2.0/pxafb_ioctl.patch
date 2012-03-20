@@ -1,0 +1,91 @@
+Index: xorg-server-1.2.0/hw/kdrive/fbdev/fbdev.c
+===================================================================
+--- xorg-server-1.2.0.orig/hw/kdrive/fbdev/fbdev.c	2012-02-26 16:31:28.000000000 +0100
++++ xorg-server-1.2.0/hw/kdrive/fbdev/fbdev.c	2012-02-26 16:31:28.000000000 +0100
+@@ -1,7 +1,7 @@
+ /*
+  * Id: fbdev.c,v 1.1 1999/11/02 03:54:46 keithp Exp $
+  *
+- * Copyright © 1999 Keith Packard
++ * Copyright ï¿½ 1999 Keith Packard
+  *
+  * Permission to use, copy, modify, distribute, and sell this software and its
+  * documentation for any purpose is hereby granted without fee, provided that
+@@ -66,15 +66,11 @@
+ 	return FALSE;
+     }
+ 
+-    priv->fb_base = (char *) mmap ((caddr_t) NULL,
+-				   priv->fix.smem_len,
+-				   PROT_READ|PROT_WRITE,
+-				   MAP_SHARED,
+-				   priv->fd, 0);
++    priv->fb_base = (char *) ioctl(priv->fd, FBIOGET_VRAM_START_ADDRESS, 0);
+     
+     if (priv->fb_base == (char *)-1) 
+     {
+-        perror("ERROR: mmap framebuffer fails!");
++        perror("ERROR: FBIOGET_VRAM_START_ADDRESS ioctl fails!");
+ 	close (priv->fd);
+ 	return FALSE;
+     }
+@@ -750,7 +746,6 @@
+ {
+     FbdevPriv	*priv = card->driver;
+     
+-    munmap (priv->fb_base, priv->fix.smem_len);
+     close (priv->fd);
+     xfree (priv);
+ }
+Index: xorg-server-1.2.0/hw/kdrive/src/kshadow.c
+===================================================================
+--- xorg-server-1.2.0.orig/hw/kdrive/src/kshadow.c	2007-01-23 06:39:15.000000000 +0100
++++ xorg-server-1.2.0/hw/kdrive/src/kshadow.c	2012-02-26 16:32:54.000000000 +0100
+@@ -1,7 +1,7 @@
+ /*
+  * $RCSId: $
+  *
+- * Copyright © 1999 Keith Packard
++ * Copyright ï¿½ 1999 Keith Packard
+  *
+  * Permission to use, copy, modify, distribute, and sell this software and its
+  * documentation for any purpose is hereby granted without fee, provided that
+@@ -26,23 +26,25 @@
+ #include <kdrive-config.h>
+ #endif
+ #include "kdrive.h"
+-
++#include "../fbdev/fbdev.h"
+ Bool
+ KdShadowFbAlloc (KdScreenInfo *screen, int fb, Bool rotate)
+ {
+     int	    paddedWidth;
++    int 	fd;
+     void    *buf;
+     int	    width = rotate ? screen->height : screen->width;
+     int	    height = rotate ? screen->width : screen->height;
+     int	    bpp = screen->fb[fb].bitsPerPixel;
+ 
++    fd = open("/dev/fb0", O_RDWR);
+     /* use fb computation for width */
+     paddedWidth = ((width * bpp + FB_MASK) >> FB_SHIFT) * sizeof (FbBits);
+-    buf = xalloc (paddedWidth * height);
++    buf = (char *) ioctl(fd, FBIOGET_VRAM_END_ADDRESS, 0) - (paddedWidth * height);
+     if (!buf)
+-	return FALSE;
+-    if (screen->fb[fb].shadow)
+-	xfree (screen->fb[fb].frameBuffer);
++    	return FALSE;
++    close(fd);
++
+     screen->fb[fb].shadow = TRUE;
+     screen->fb[fb].frameBuffer = buf;
+     screen->fb[fb].byteStride = paddedWidth;
+@@ -55,7 +57,6 @@
+ {
+     if (screen->fb[fb].shadow)
+     {
+-	xfree (screen->fb[fb].frameBuffer);
+ 	screen->fb[fb].frameBuffer = 0;
+ 	screen->fb[fb].shadow = FALSE;
+     }
