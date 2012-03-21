@@ -1,0 +1,91 @@
+Index: pcmanfm-mod-1.2.3/src/desktop/desktop-window.c
+===================================================================
+--- pcmanfm-mod-1.2.3.orig/src/desktop/desktop-window.c	2012-03-22 00:41:26.000000000 +0100
++++ pcmanfm-mod-1.2.3/src/desktop/desktop-window.c	2012-03-22 00:40:16.000000000 +0100
+@@ -111,11 +111,11 @@
+ 
+ static void on_paste( GtkMenuItem *menuitem, DesktopWindow* self );
+ static void on_settings( GtkMenuItem *menuitem, DesktopWindow* self );
++static void on_size_changed (GdkScreen *screen, gpointer user_data);
+ 
+ static void on_popup_new_folder_activate ( GtkMenuItem *menuitem, gpointer data );
+ static void on_popup_new_text_file_activate ( GtkMenuItem *menuitem, gpointer data );
+ 
+-static GdkFilterReturn on_rootwin_event ( GdkXEvent *xevent, GdkEvent *event, gpointer data );
+ static void forward_event_to_rootwin( GdkScreen *gscreen, GdkEvent *event );
+ 
+ static void calc_item_size( DesktopWindow* self, DesktopItem* item );
+@@ -332,10 +332,11 @@
+ 
+     root = gdk_screen_get_root_window( gtk_widget_get_screen( (GtkWidget*)self ) );
+     gdk_window_set_events( root, gdk_window_get_events( root )
+-                           | GDK_PROPERTY_CHANGE_MASK );
+-    gdk_window_add_filter( root, on_rootwin_event, self );
+-}
++                           | GDK_PROPERTY_CHANGE_MASK | GDK_SUBSTRUCTURE_MASK |GDK_STRUCTURE_MASK );
++                           
++	g_signal_connect(gdk_screen_get_default(), "size-changed", G_CALLBACK( on_size_changed ), (gpointer) self);
+ 
++}
+ 
+ GtkWidget* desktop_window_new(void)
+ {
+@@ -357,10 +358,6 @@
+     g_return_if_fail(object != NULL);
+     g_return_if_fail(IS_DESKTOP_WINDOW(object));
+ 
+-    gdk_window_remove_filter(
+-                    gdk_screen_get_root_window( gtk_widget_get_screen( (GtkWidget*)object) ),
+-                    on_rootwin_event, self );
+-
+     if( self->background )
+         g_object_unref( self->background );
+ 
+@@ -680,7 +677,14 @@
+ 	layout_items( win );
+ }
+ 
+-
++void on_size_changed (GdkScreen *screen, gpointer user_data) {
++			
++	gtk_window_resize((GtkWindow*)user_data, gdk_screen_get_width(screen), gdk_screen_get_height(screen));
++	DesktopWindow* self = (DesktopWindow*)user_data;
++    get_working_area( gtk_widget_get_screen((GtkWidget*)self), &self->wa );
++    layout_items( self );
++	
++}
+ 
+ void on_size_request( GtkWidget* w, GtkRequisition* req )
+ {
+@@ -2330,31 +2334,6 @@
+ 
+ /*----------------- X11-related sutff ----------------*/
+ 
+-static
+-GdkFilterReturn on_rootwin_event ( GdkXEvent *xevent,
+-                                   GdkEvent *event,
+-                                   gpointer data )
+-{
+-    XPropertyEvent * evt = ( XPropertyEvent* ) xevent;
+-    DesktopWindow* self = (DesktopWindow*)data;
+-
+-    if ( evt->type == PropertyNotify )
+-    {
+-        if( evt->atom == ATOM_NET_WORKAREA )
+-        {
+-            /* working area is resized */
+-            get_working_area( gtk_widget_get_screen((GtkWidget*)self), &self->wa );
+-            layout_items( self );
+-        }
+-#if 0
+-        else if( evt->atom == ATOM_XROOTMAP_ID )
+-        {
+-            /* wallpaper was changed by other programs */
+-        }
+-#endif
+-    }
+-    return GDK_FILTER_TRANSLATE;
+-}
+ 
+ /* This function is taken from xfdesktop */
+ void forward_event_to_rootwin( GdkScreen *gscreen, GdkEvent *event )
