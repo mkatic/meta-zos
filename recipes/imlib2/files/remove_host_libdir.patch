@@ -1,0 +1,14 @@
+Index: imlib2-1.4.5/imlib2-config.in
+===================================================================
+--- imlib2-1.4.5.orig/imlib2-config.in	2012-04-06 13:47:57.000000000 +0200
++++ imlib2-1.4.5/imlib2-config.in	2012-04-06 13:48:15.000000000 +0200
+@@ -45,8 +45,7 @@
+       echo $includes
+       ;;
+     --libs)
+-      libdirs=-L@libdir@
+-      echo $libdirs -lImlib2 @my_libs@
++      echo -lImlib2 @my_libs@
+       ;;
+     *)
+       echo "${usage}" 1>&2

@@ -1,0 +1,18 @@
+diff --git a/src/video/fbcon/SDL_fbvideo.c b/src/video/fbcon/SDL_fbvideo.c
+index 6da0451..bdefc82 100644
+--- a/src/video/fbcon/SDL_fbvideo.c
++++ b/src/video/fbcon/SDL_fbvideo.c
+@@ -1036,10 +1036,13 @@ static SDL_Surface *FB_SetVideoMode(_THIS, SDL_Surface *current,
+ 		if (width == 320 && height == 240) {
+ 			vinfo.xres = 240;
+ 			vinfo.yres = 320;
++			/* notify tslib of resolution change */
++			ts_option(ts_dev, TS_SCREEN_RES, 240, 320);
+ 			}
+ 		if (width == 640 && height == 480) {
+ 			vinfo.xres = 480;
+ 			vinfo.yres = 640;
++			ts_option(ts_dev, TS_SCREEN_RES, 480, 640);
+ 			}
+ 			if ( ioctl(console_fd, FBIOPUT_VSCREENINFO, &vinfo) < 0 ) {
+ 				SDL_SetError("Couldn't set console screen info");

@@ -1,0 +1,13 @@
+Index: git/configure.ac
+===================================================================
+--- git.orig/configure.ac	2012-03-24 13:34:31.000000000 +0100
++++ git/configure.ac	2012-03-24 13:34:38.000000000 +0100
+@@ -18,7 +18,7 @@
+ # Lua gets different names in different distros :(
+ PKG_PROG_PKG_CONFIG
+ AC_MSG_CHECKING([for lua])
+-for lua_name in lua lua5.1
++for lua_name in lua lua5.1 luajit
+ do
+   PKG_CHECK_EXISTS([$lua_name], [LUA_NAME=$lua_name ; break])
+ done

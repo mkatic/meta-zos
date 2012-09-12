@@ -1,15 +1,20 @@
-Index: tslib-1.0/plugins/linear.c
-===================================================================
---- tslib-1.0.orig/plugins/linear.c	2012-02-12 01:03:12.000000000 +0100
-+++ tslib-1.0/plugins/linear.c	2012-02-12 01:04:17.000000000 +0100
-@@ -57,9 +57,10 @@
- 			samp->y =	( lin->a[5] +
- 					lin->a[3]*xtemp +
- 					lin->a[4]*ytemp ) / lin->a[6];
--
+commit 8cb2558e293161fce155763fd1c5aa464fb96943
+Author: Marko Katic <dromede.gmail.com>
+Date:   Mon Jun 4 17:50:29 2012 +0200
+
+    linear.c: Remove touchscreen scaling as it does nothing.
+    Reject samples with values < 0.
+
+diff --git a/plugins/linear.c b/plugins/linear.c
+index 822f647..87f34ec 100644
+--- a/plugins/linear.c
++++ b/plugins/linear.c
+@@ -70,8 +70,9 @@ linear_read(struct tslib_module_info *info, struct ts_sample *samp, int nr)
+ 			if (info->dev->res_y && lin->cal_res_y)
+ 				samp->y = samp->y * info->dev->res_y / lin->cal_res_y;
+ 
 -			samp->pressure = ((samp->pressure + lin->p_offset)
 -						 * lin->p_mult) / lin->p_div;
-+			
 +			if ((samp->x < 0) || (samp->y < 0))
 +				return 0;
 +			

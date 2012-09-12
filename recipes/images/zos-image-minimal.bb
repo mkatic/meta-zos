@@ -13,9 +13,12 @@ ALSA_UTILS = "alsa-utils-alsamixer \
              alsa-utils-alsactl \
              alsa-utils-alsaloop \
             "
-X11_ENV = "awesome \
+X11_ENV = " \
 			xserver-kdrive-fbdev \
+			xinit \
+			xrandr \
 			mrxvt \
+			awesome \
 			pcmanfm-mod \
 			leafpad \
 			epdfview \

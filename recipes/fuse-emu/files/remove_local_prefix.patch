@@ -1,0 +1,19 @@
+Index: fuse-1.0.0.1a/configure.in
+===================================================================
+--- fuse-1.0.0.1a.orig/configure.in	2012-06-13 23:30:34.000000000 +0200
++++ fuse-1.0.0.1a/configure.in	2012-06-13 23:30:51.000000000 +0200
+@@ -76,14 +76,6 @@
+ dnl Checks for library functions.
+ AC_CHECK_FUNCS(dirname geteuid getopt_long mkstemp fsync)
+ 
+-dnl Allow the user to say that various libraries are in one place
+-AC_ARG_WITH(local-prefix,
+-[  --with-local-prefix=PFX local libraries installed in PFX (optional)],
+-CPPFLAGS="$CPPFLAGS -I$withval/include"; LDFLAGS="$LDFLAGS -L$withval/lib",
+-if test "$prefix" != "NONE"; then
+-  CPPFLAGS="$CPPFLAGS -I$prefix/include"; LDFLAGS="$LDFLAGS -L$prefix/lib"
+-fi)
+-
+ dnl Select a user interface
+ 
+ dnl Try various UI options; set the `ui' variable when we've got one

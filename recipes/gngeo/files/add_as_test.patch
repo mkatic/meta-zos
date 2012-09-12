@@ -1,0 +1,13 @@
+Index: gngeo-0.7/configure.in
+===================================================================
+--- gngeo-0.7.orig/configure.in	2012-06-07 19:33:26.000000000 +0200
++++ gngeo-0.7/configure.in	2012-06-07 19:33:42.000000000 +0200
+@@ -24,7 +24,7 @@
+ # Checks for programs.
+ AC_PROG_CC
+ AC_PROG_RANLIB
+-
++AM_PROG_AS
+ 
+ 
+ #echo $CC

@@ -1,8 +1,8 @@
-diff --git a/fb/Makefile.am b/fb/Makefile.am
-index 11b2d2f..5d4d3c8 100644
---- a/fb/Makefile.am
-+++ b/fb/Makefile.am
-@@ -50,6 +50,9 @@ libfb_la_SOURCES = 	\
+Index: xorg-server-1.2.0/fb/Makefile.am
+===================================================================
+--- xorg-server-1.2.0.orig/fb/Makefile.am	2007-01-23 06:39:15.000000000 +0100
++++ xorg-server-1.2.0/fb/Makefile.am	2012-03-31 00:08:51.000000000 +0200
+@@ -50,6 +50,9 @@
  	fbline.c	\
  	fboverlay.c	\
  	fboverlay.h	\
@@ -12,11 +12,11 @@ index 11b2d2f..5d4d3c8 100644
  	fbpict.c	\
  	fbpict.h	\
  	fbpixmap.c	\
-diff --git a/fb/fb.h b/fb/fb.h
-index 198c860..95c3841 100644
---- a/fb/fb.h
-+++ b/fb/fb.h
-@@ -2050,5 +2050,12 @@ fbFillRegionTiled (DrawablePtr	pDrawable,
+Index: xorg-server-1.2.0/fb/fb.h
+===================================================================
+--- xorg-server-1.2.0.orig/fb/fb.h	2012-03-31 00:08:50.000000000 +0200
++++ xorg-server-1.2.0/fb/fb.h	2012-03-31 00:08:51.000000000 +0200
+@@ -2050,5 +2050,12 @@
  void
  fbPaintWindow(WindowPtr pWin, RegionPtr pRegion, int what);
  
@@ -29,12 +29,11 @@ index 198c860..95c3841 100644
 +#define MEMMOVE_WRAPPED(dst, src, size) fbmemcpy_arm((dst), (src), (size))
  
  #endif /* _FB_H_ */
-diff --git a/fb/fbarmv6.c b/fb/fbarmv6.c
-new file mode 100644
-index 0000000..ce95b8e
---- /dev/null
-+++ b/fb/fbarmv6.c
-@@ -0,0 +1,301 @@
+Index: xorg-server-1.2.0/fb/fbarmv6.c
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ xorg-server-1.2.0/fb/fbarmv6.c	2012-03-31 00:10:28.000000000 +0200
+@@ -0,0 +1,280 @@
 +/*
 + * Copyright © 2008 Nokia Corporation
 + *
@@ -94,27 +93,6 @@ index 0000000..ce95b8e
 +
 +    fbCompositeSolidMask_nx8x0565_internal_armv6(dst, mask, src, w,
 +                                                 dstStride - w, maskStride - w, h);
-+
-+}
-+
-+void fbCompositeSrcAdd_8000x8000_armv6 (FbComposeData *params)
-+{
-+    CARD8   *dstLine, *dst;
-+    CARD8   *srcLine, *src;
-+    FbStride    dstStride, srcStride;
-+    CARD16  w, h;
-+
-+    fbComposeGetStart (params->src, params->xSrc, params->ySrc, CARD8,
-+                       srcStride, srcLine, 1);
-+    fbComposeGetStart (params->dest, params->xDest, params->yDest, CARD8,
-+                       dstStride, dstLine, 1);
-+
-+    dst = dstLine;
-+    src = srcLine;
-+    h = params->height;
-+    w = params->width;
-+
-+    fbCompositeSrcAdd_8000x8000_internal_armv6(dst, src, w, dstStride, srcStride, h);
 +
 +}
 +
@@ -336,12 +314,11 @@ index 0000000..ce95b8e
 +        "    bx     lr\n"
 +    );
 +}
-diff --git a/fb/fbarmv6.h b/fb/fbarmv6.h
-new file mode 100644
-index 0000000..9be6883
---- /dev/null
-+++ b/fb/fbarmv6.h
-@@ -0,0 +1,90 @@
+Index: xorg-server-1.2.0/fb/fbarmv6.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ xorg-server-1.2.0/fb/fbarmv6.h	2012-03-31 00:10:39.000000000 +0200
+@@ -0,0 +1,60 @@
 +/*
 + * Copyright © 2008 Nokia Corporation
 + *
@@ -372,34 +349,13 @@ index 0000000..9be6883
 +#ifndef _FBARMV6_H_
 +#define _FBARMV6_H_
 +
-+#define USE_ARMV6
-+#endif
-+
-+#ifdef USE_ARMV6
-+
 +#define FbByteMulAdd_store_r5g6b5_armv6(x, a, y) do {                         \
 +        unsigned int t = ((x & 0xff00ff) * a) + 0x800080;                     \
 +        x = (((x >> 8) & 0xff) * a) + 0x80;                                   \
 +        t = (t + ((t >> 8) & 0xff00ff));                                      \
 +        x = (x + ((x >> 8)));                                                 \
-+        asm(".arch iwmmxt\n\t"	\
-+        	".cpu iwmmxt\n\t"	\
-+			"tmcrr wr0, %1, %2\n\t" 										  \
-+        	"wunpckehuw wr1, wr0\n\t"                                          \
-+        	"waddbus wr2, wr0, wr1\n\t"	                                      \
-+    		"textrmsw %0, wr0, #0\n\t"											  \
-+			: "=r" (t)                                                        \
-+			: "r" (t), "r" (y << 8)											  \
-+			);       					              						  \
-+		asm(".arch iwmmxt\n\t"	\
-+			".cpu iwmmxt\n\t"	\
-+			"tmcrr wr0, %1, %2\n\t" 										  \
-+        	"wunpckehuw wr1, wr0\n\t"                                          \
-+        	"waddbus wr2, wr0, wr1\n\t"	                                      \
-+    		"textrmsw %0, wr0, #0\n\t"											  \
-+			: "=r" (x)                                                        \
-+			: "r" (x), "r" (y)												  \
-+			);       					              						  \
++        t = iwmmxt_wadd8(t, (y << 8)); 											\
++        x = iwmmxt_wadd8(x, y); 											\
 +        x = ((t >> (3 + 8)) & 0x001F)                                         \
 +                | ((t >> (8 + 8)) & 0xF800) | ((x >> 5) & 0x07E0);            \
 +    } while (0)
@@ -412,32 +368,22 @@ index 0000000..9be6883
 +        t = (t >> 8) & 0xff00ff;                                              \
 +        x &= 0xff00;                                                          \
 +        x += t;                                                               \
-+        asm(".arch iwmmxt\n\t" \
-+        	".cpu iwmmxt\n\t" \
-+			"tmcrr wr0, %1, %2\n\t" 										  \
-+        	"wunpckehuw wr1, wr0\n\t"                                          \
-+        	"waddbus wr2, wr0, wr1\n\t"	                                      \
-+    		"textrmsw %0, wr0, #0\n\t"											  \
-+			: "=r" (x)                                                        \
-+			: "r" (x), "r" (y & 0xffffff)									  \
-+			);  														      \
++        x = iwmmxt_wadd8(x, (y & 0xffffff));								  \
 +    } while (0)
-+
-+#endif
 +
 +struct _FbComposeData;
 +
 +void fbCompositeSolidMask_nx8x0565_armv6 (struct _FbComposeData *params);
-+void fbCompositeSrcAdd_8000x8000_armv6 (struct _FbComposeData *params);
 +void fbComposite_x8r8g8b8_src_r5g6b5_armv6 (struct _FbComposeData *params);
 +
 +void fbmemcpy_arm(void *dst, void *src, int w);
-diff --git a/fb/fbarmv6_internal.h b/fb/fbarmv6_internal.h
-new file mode 100644
-index 0000000..84517f7
---- /dev/null
-+++ b/fb/fbarmv6_internal.h
-@@ -0,0 +1,740 @@
++
++#endif
+Index: xorg-server-1.2.0/fb/fbarmv6_internal.h
+===================================================================
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ xorg-server-1.2.0/fb/fbarmv6_internal.h	2012-03-31 00:10:55.000000000 +0200
+@@ -0,0 +1,586 @@
 +/*
 + * Copyright © 2008 Nokia Corporation
 + *
@@ -472,17 +418,18 @@ index 0000000..84517f7
 +#define USE_ARMV6
 +#ifdef USE_ARMV6
 +
-+static inline uint32_t iwmmxt_wadd8(uint32_t a, uint32_t b)
++inline uint32_t iwmmxt_wadd8(uint32_t a, uint32_t b)
 +{
 +    uint32_t result;
 +    asm (
 +    	".arch iwmmxt\n\t"
 +    	".cpu iwmmxt\n\t"
-+    	"tmcrr wr0, r0, r1\n\t"
-+        "wunpckehuw wr1, wr0\n\t"
++    	"tbcstw wr0, %1\n\t"
++    	"tbcstw wr1, %2\n\t"
 +        "waddbus wr2, wr0, wr1\n\t"
 +    	"textrmsw %0, wr2, #0\n\t"
 +    	: "=r" (result)
++    	: "r" (a), "r" (b)
 +    );
 +    return result;
 +}
@@ -726,161 +673,6 @@ index 0000000..84517f7
 +    fbCompositeSolidMask_nx8x0565_internal_mixed_armv6_c((a), (b), (c), (d), (e), (f), (g))
 +
 +#endif
-+
-+/**
-+ * A 'reference' C code of optimized 'fbCompositeSrcAdd_8000x8000' function, the 
-+ * use of assembly is minimal (restricted to the use of 'uqadd8' instruction only).
-+ *
-+ * Code is implemented by processing two rows simultaneously for better handling 
-+ * of the common use cases (operations with fonts glyphs) where width is quite small
-+ * (typically only 6-13 pixels).
-+ */
-+static inline void fbCompositeSrcAdd_8000x8000_internal_mixed_armv6_c(
-+    uint8_t *dst, uint8_t *src, int w, int dst_stride,
-+    int src_stride, int h)
-+{
-+    int backup_w = w;
-+    uint32_t s1, s2, d1, d2;
-+
-+    /* process two rows at once */
-+    while ((h -= 2) >= 0)
-+    {
-+        w = backup_w;
-+        if (w >= 3)
-+        {
-+            if ((uintptr_t)dst & 1)
-+            {
-+                s1 = *(uint8_t *)(src + src_stride);
-+                s2 = *(uint8_t *)src;
-+                src += 1;
-+                d1 = *(uint8_t *)(dst + dst_stride);
-+                d2 = *(uint8_t *)dst;
-+                d1 = iwmmxt_wadd8(d1, s1);
-+                d2 = iwmmxt_wadd8(d2, s2);
-+                *(uint8_t *)(dst + dst_stride) = d1;
-+                *(uint8_t *)(dst) = d2;
-+                dst += 1;
-+                w -= 1;
-+            }
-+            if ((uintptr_t)dst & 2)
-+            {
-+                s1 = *(uint16_t *)(src + src_stride);
-+                s2 = *(uint16_t *)src;
-+                src += 2;
-+                d1 = *(uint16_t *)(dst + dst_stride);
-+                d2 = *(uint16_t *)dst;
-+                d1 = iwmmxt_wadd8(d1, s1);
-+                d2 = iwmmxt_wadd8(d2, s2);
-+                *(uint16_t *)(dst + dst_stride) = d1;
-+                *(uint16_t *)(dst) = d2;
-+                dst += 2;
-+                w -= 2;
-+            }
-+        }
-+
-+        while ((w -= 4) >= 0)
-+        {
-+            s1 = *(uint32_t *)(src + src_stride);
-+            s2 = *(uint32_t *)src;
-+            src += 4;
-+            d1 = *(uint32_t *)(dst + dst_stride);
-+            d2 = *(uint32_t *)dst;
-+            d1 = iwmmxt_wadd8(d1, s1);
-+            d2 = iwmmxt_wadd8(d2, s2);
-+            *(uint32_t *)(dst + dst_stride) = d1;
-+            *(uint32_t *)(dst) = d2;
-+            dst += 4;
-+        }
-+
-+        if (w & 2)
-+        {
-+            s1 = *(uint16_t *)(src + src_stride);
-+            s2 = *(uint16_t *)src;
-+            src += 2;
-+            d1 = *(uint16_t *)(dst + dst_stride);
-+            d2 = *(uint16_t *)dst;
-+            d1 = iwmmxt_wadd8(d1, s1);
-+            d2 = iwmmxt_wadd8(d2, s2);
-+            *(uint16_t *)(dst + dst_stride) = d1;
-+            *(uint16_t *)(dst) = d2;
-+            dst += 2;
-+        }
-+        if (w & 1)
-+        {
-+            s1 = *(uint8_t *)(src + src_stride);
-+            s2 = *(uint8_t *)src;
-+            src += 1;
-+            d1 = *(uint8_t *)(dst + dst_stride);
-+            d2 = *(uint8_t *)dst;
-+            d1 = iwmmxt_wadd8(d1, s1);
-+            d2 = iwmmxt_wadd8(d2, s2);
-+            *(uint8_t *)(dst + dst_stride) = d1;
-+            *(uint8_t *)(dst) = d2;
-+            dst += 1;
-+        }
-+
-+        src += src_stride * 2 - backup_w;
-+        dst += dst_stride * 2 - backup_w;
-+    }
-+
-+    /* process the last remaining row if needed */
-+    if (h == -1)
-+    {
-+        w = backup_w;
-+        if (w >= 3)
-+        {
-+            if ((uintptr_t)dst & 1)
-+            {
-+                s2 = *(uint8_t *)src;
-+                src += 1;
-+                d2 = *(uint8_t *)dst;
-+                d2 = iwmmxt_wadd8(d2, s2);
-+                *(uint8_t *)(dst) = d2;
-+                dst += 1;
-+                w -= 1;
-+            }
-+            if ((uintptr_t)dst & 2)
-+            {
-+                s2 = *(uint16_t *)src;
-+                src += 2;
-+                d2 = *(uint16_t *)dst;
-+                d2 = iwmmxt_wadd8(d2, s2);
-+                *(uint16_t *)(dst) = d2;
-+                dst += 2;
-+                w -= 2;
-+            }
-+        }
-+
-+        while ((w -= 4) >= 0)
-+        {
-+            s2 = *(uint32_t *)src;
-+            src += 4;
-+            d2 = *(uint32_t *)dst;
-+            d2 = iwmmxt_wadd8(d2, s2);
-+            *(uint32_t *)(dst) = d2;
-+            dst += 4;
-+        }
-+
-+        if (w & 2)
-+        {
-+            s2 = *(uint16_t *)src;
-+            src += 2;
-+            d2 = *(uint16_t *)dst;
-+            d2 = iwmmxt_wadd8(d2, s2);
-+            *(uint16_t *)(dst) = d2;
-+            dst += 2;
-+        }
-+        if (w & 1)
-+        {
-+            s2 = *(uint8_t *)src;
-+            src += 1;
-+            d2 = *(uint8_t *)dst;
-+            d2 = iwmmxt_wadd8(d2, s2);
-+            *(uint8_t *)(dst) = d2;
-+            dst += 1;
-+        }
-+    }
-+}
 +
 +/**
 + * Conversion x8r8g8b8 -> r5g6b5
@@ -1178,11 +970,11 @@ index 0000000..84517f7
 +#endif
 +
 +#endif
-diff --git a/fb/fbblt.c b/fb/fbblt.c
-index d176a7c..8f5001e 100644
---- a/fb/fbblt.c
-+++ b/fb/fbblt.c
-@@ -92,10 +92,10 @@ fbBlt (FbBits   *srcLine,
+Index: xorg-server-1.2.0/fb/fbblt.c
+===================================================================
+--- xorg-server-1.2.0.orig/fb/fbblt.c	2007-01-23 06:39:15.000000000 +0100
++++ xorg-server-1.2.0/fb/fbblt.c	2012-03-31 00:08:51.000000000 +0200
+@@ -92,10 +92,10 @@
  
          if (!upsidedown)
              for (i = 0; i < height; i++)
@@ -1195,11 +987,11 @@ index d176a7c..8f5001e 100644
  
          return;
      }
-diff --git a/fb/fbcompose.c b/fb/fbcompose.c
-index b1903e9..4a01463 100644
---- a/fb/fbcompose.c
-+++ b/fb/fbcompose.c
-@@ -3557,18 +3557,7 @@ fbCompositeRect (const FbComposeData *data, CARD32 *scanline_buffer)
+Index: xorg-server-1.2.0/fb/fbcompose.c
+===================================================================
+--- xorg-server-1.2.0.orig/fb/fbcompose.c	2007-01-23 06:39:15.000000000 +0100
++++ xorg-server-1.2.0/fb/fbcompose.c	2012-03-31 00:08:51.000000000 +0200
+@@ -3557,18 +3557,7 @@
  }
  
  void
@@ -1219,7 +1011,7 @@ index b1903e9..4a01463 100644
  {
      RegionRec	    region;
      int		    n;
-@@ -3576,94 +3565,96 @@ fbCompositeGeneral (CARD8	op,
+@@ -3576,94 +3565,96 @@
      Bool	    srcRepeat = FALSE;
      Bool	    maskRepeat = FALSE;
      int		    w, h;
@@ -1373,10 +1165,10 @@ index b1903e9..4a01463 100644
      }
  	pbox++;
      }
-diff --git a/fb/fbpict.c b/fb/fbpict.c
-index 6116690..9364058 100644
---- a/fb/fbpict.c
-+++ b/fb/fbpict.c
+Index: xorg-server-1.2.0/fb/fbpict.c
+===================================================================
+--- xorg-server-1.2.0.orig/fb/fbpict.c	2012-03-31 00:08:50.000000000 +0200
++++ xorg-server-1.2.0/fb/fbpict.c	2012-03-31 00:09:22.000000000 +0200
 @@ -29,26 +29,14 @@
  #include <string.h>
  
@@ -1406,7 +1198,7 @@ index 6116690..9364058 100644
  
  CARD32
  fbOver (CARD32 x, CARD32 y)
-@@ -98,115 +86,102 @@ fbIn (CARD32 x, CARD8 y)
+@@ -98,115 +86,102 @@
   */
  
  void
@@ -1555,7 +1347,7 @@ index 6116690..9364058 100644
  #define FbInOverC(src,srca,msk,dst,i,result) { \
      CARD16  __a = FbGet8(msk,i); \
      CARD32  __t, __ta; \
-@@ -221,54 +196,49 @@ fbCompositeSolidMask_nx8888x8888C (CARD8      op,
+@@ -221,54 +196,49 @@
  		FbInOverC (src, srca, ma, d, 8, n);
  		FbInOverC (src, srca, ma, d, 16, o);
  		FbInOverC (src, srca, ma, d, 24, p);
@@ -1625,7 +1417,7 @@ index 6116690..9364058 100644
  	    if (m == 0xff)
  	    {
  		if (srca == 0xff)
-@@ -288,78 +258,71 @@ fbCompositeSolidMask_nx8x0888 (CARD8      op,
+@@ -288,78 +258,71 @@
  	    dst += 3;
  	}
      }
@@ -1732,7 +1524,7 @@ index 6116690..9364058 100644
  {
      CARD32	src, srca;
      CARD16	src16;
-@@ -367,10 +330,10 @@ fbCompositeSolidMask_nx8888x0565C (CARD8      op,
+@@ -367,10 +330,10 @@
      CARD32	d;
      CARD32	*maskLine, *mask, ma;
      FbStride	dstStride, maskStride;
@@ -1745,7 +1537,7 @@ index 6116690..9364058 100644
  
      srca = src >> 24;
      if (src == 0)
-@@ -378,129 +341,122 @@ fbCompositeSolidMask_nx8888x0565C (CARD8      op,
+@@ -378,129 +341,122 @@
  
      src16 = cvt8888to0565(src);
  
@@ -1917,7 +1709,7 @@ index 6116690..9364058 100644
  	    a = s >> 24;
  	    if (a)
  	    {
-@@ -513,43 +469,38 @@ fbCompositeSrc_8888x0888 (CARD8      op,
+@@ -513,43 +469,38 @@
  	    dst += 3;
  	}
      }
@@ -1974,7 +1766,7 @@ index 6116690..9364058 100644
  	    a = s >> 24;
  	    if (a)
  	    {
-@@ -557,280 +508,128 @@ fbCompositeSrc_8888x0565 (CARD8      op,
+@@ -557,280 +508,128 @@
  		    d = s;
  		else
  		{
@@ -2039,7 +1831,7 @@ index 6116690..9364058 100644
      }
 -}
 -
--
+ 
 -#define cvt8888Revto0565(s) ((((s) >> 19) & 0x001f) | \
 -			     (((s) >>  5) & 0x07e0) | \
 -			     (((s) <<  8) & 0xf800))
@@ -2071,7 +1863,7 @@ index 6116690..9364058 100644
 -        \
 -        /* Pack result as r5g6b5 */ \
 -        (d) = (d_r & 0xf800) | ((d_g & 0xfc00) >> 5) | (d_b >> 11)
--
+ 
 -void
 -fbCompositeSrc_8888RevNPx0565 (FbComposeData *params)
 -{
@@ -2107,7 +1899,7 @@ index 6116690..9364058 100644
 -
 -            w -= 4;
 -            src += 4;
- 
+-
 -            /* Check if the next 4 pixels are opaque */
 -            if ((s1 & s2 & s3 & s4) > 0xfeffffff)
 -            {
@@ -2164,7 +1956,7 @@ index 6116690..9364058 100644
 -                dst_2px_wide += 2;
 -            }
 -        }
- 
+-
 -        /* Deal with left over pixels */
 -        for (dst = (CARD16 *) dst_2px_wide; w > -4; w--)
 -        {
@@ -2296,7 +2088,7 @@ index 6116690..9364058 100644
  		    if (d)
  		    {
  			m = FbAdd(s,d,0,t);
-@@ -840,26 +639,18 @@ fbCompositeSrcAdd_8888x8888 (CARD8	op,
+@@ -840,26 +639,18 @@
  			s = m|n|o|p;
  		    }
  		}
@@ -2328,7 +2120,7 @@ index 6116690..9364058 100644
  {
      FbBits	*dstBits, *srcBits;
      FbStride	dstStride, srcStride;
-@@ -867,20 +658,22 @@ fbCompositeSrcAdd_1000x1000 (CARD8	op,
+@@ -867,20 +658,22 @@
      int		dstXoff, dstYoff;
      int		srcXoff, srcYoff;
  
@@ -2359,7 +2151,7 @@ index 6116690..9364058 100644
  
  	   GXor,
  	   FB_ALLONES,
-@@ -888,21 +681,11 @@ fbCompositeSrcAdd_1000x1000 (CARD8	op,
+@@ -888,21 +681,11 @@
  
  	   FALSE,
  	   FALSE);
@@ -2383,7 +2175,7 @@ index 6116690..9364058 100644
  {
      FbBits	*dstBits;
      FbStip	*maskBits;
-@@ -912,17 +695,17 @@ fbCompositeSolidMask_nx1xn (CARD8      op,
+@@ -912,17 +695,17 @@
      int		maskXoff, maskYoff;
      FbBits	src;
  
@@ -2407,7 +2199,7 @@ index 6116690..9364058 100644
  
      switch (dstBpp) {
      case 32:
-@@ -936,51 +719,877 @@ fbCompositeSolidMask_nx1xn (CARD8      op,
+@@ -936,51 +719,877 @@
  
      src = fbReplicatePixel (src, dstBpp);
  
@@ -3302,7 +3094,7 @@ index 6116690..9364058 100644
  
  #ifdef USE_MMX
      static Bool mmx_setup = FALSE;
-@@ -1011,6 +1620,10 @@ fbComposite (int      op,
+@@ -1011,6 +1620,10 @@
          && (!pMask || pMask->filter != PictFilterConvolution))
      switch (op) {
      case PictOpSrc:
@@ -3313,7 +3105,7 @@ index 6116690..9364058 100644
  #ifdef USE_MMX
  	if (!pMask && pSrc->format == pDst->format &&
  	    pSrc->format != PICT_a8 && pSrc->pDrawable != pDst->pDrawable)
-@@ -1018,6 +1631,12 @@ fbComposite (int      op,
+@@ -1018,6 +1631,12 @@
  	    func = fbCompositeCopyAreammx;
  	}
  #endif
@@ -3326,7 +3118,7 @@ index 6116690..9364058 100644
  	break;
      case PictOpOver:
  	if (pMask)
-@@ -1032,12 +1651,14 @@ fbComposite (int      op,
+@@ -1032,12 +1651,14 @@
  			switch (pDst->format) {
  			case PICT_r5g6b5:
  			case PICT_b5g6r5:
@@ -3343,7 +3135,7 @@ index 6116690..9364058 100644
  			    break;
  			case PICT_r8g8b8:
  			case PICT_b8g8r8:
-@@ -1152,6 +1773,7 @@ fbComposite (int      op,
+@@ -1152,6 +1773,7 @@
  #endif
  				break;
  			    case PICT_r5g6b5:
@@ -3351,7 +3143,7 @@ index 6116690..9364058 100644
  #ifdef USE_MMX
  				if (fbHaveMMX())
  				    func = fbCompositeSrc_8888RevNPx0565mmx;
-@@ -1181,9 +1803,7 @@ fbComposite (int      op,
+@@ -1181,9 +1803,7 @@
  #ifdef USE_MMX
  				if (fbHaveMMX())
  				    func = fbCompositeSrc_8888RevNPx0565mmx;
@@ -3361,7 +3153,7 @@ index 6116690..9364058 100644
  				break;
  			    default:
  				break;
-@@ -1251,7 +1871,7 @@ fbComposite (int      op,
+@@ -1251,7 +1871,7 @@
  		    break;
  		}
  	    }
@@ -3370,7 +3162,7 @@ index 6116690..9364058 100644
  	    {
  		switch (pSrc->format) {
  		case PICT_a8r8g8b8:
-@@ -1263,13 +1883,13 @@ fbComposite (int      op,
+@@ -1263,13 +1883,13 @@
  			    func = fbCompositeSrc_8888x8888mmx;
  			else
  #endif
@@ -3386,7 +3178,7 @@ index 6116690..9364058 100644
  			break;
  		    default:
  			break;
-@@ -1309,13 +1929,13 @@ fbComposite (int      op,
+@@ -1309,13 +1929,13 @@
  			    func = fbCompositeSrc_8888x8888mmx;
  			else
  #endif
@@ -3402,7 +3194,7 @@ index 6116690..9364058 100644
  			break;
  		    default:
  			break;
-@@ -1380,12 +2000,12 @@ fbComposite (int      op,
+@@ -1380,12 +2000,12 @@
  	    case PICT_a8:
  		switch (pDst->format) {
  		case PICT_a8:
@@ -3417,7 +3209,7 @@ index 6116690..9364058 100644
  		    break;
  		default:
  		    break;
-@@ -1407,9 +2027,34 @@ fbComposite (int      op,
+@@ -1407,9 +2027,34 @@
  	break;
      }
  
@@ -3453,7 +3245,7 @@ index 6116690..9364058 100644
           return;
      }
  
-@@ -1432,59 +2077,63 @@ fbComposite (int      op,
+@@ -1432,59 +2077,63 @@
      while (n--)
      {
  	h = pbox->y2 - pbox->y1;
@@ -3533,6 +3325,11 @@ index 6116690..9364058 100644
 -		x_src += w_this;
 -		x_msk += w_this;
 -		x_dst += w_this;
+-	    }
+-	    h -= h_this;
+-	    y_src += h_this;
+-	    y_msk += h_this;
+-	    y_dst += h_this;
 +
 +		(*func) (&params);
 +
@@ -3540,11 +3337,7 @@ index 6116690..9364058 100644
 +		params.xSrc += params.width;
 +		params.xMask += params.width;
 +		params.xDest += params.width;
- 	    }
--	    h -= h_this;
--	    y_src += h_this;
--	    y_msk += h_this;
--	    y_dst += h_this;
++	    }
 +	    h -= params.height;
 +	    params.ySrc += params.height;
 +	    params.yMask += params.height;
@@ -3552,7 +3345,7 @@ index 6116690..9364058 100644
  	}
  	pbox++;
      }
-@@ -1610,7 +2259,9 @@ static unsigned int detectCPUFeatures(void) {
+@@ -1610,7 +2259,9 @@
              features |= SSE;
          if (result & (1 << 26))
              features |= SSE2;
@@ -3563,10 +3356,10 @@ index 6116690..9364058 100644
              /* check for AMD MMX extensions */
  
              unsigned int result;            
-diff --git a/fb/fbpict.h b/fb/fbpict.h
-index 73d7f1d..175ccc4 100644
---- a/fb/fbpict.h
-+++ b/fb/fbpict.h
+Index: xorg-server-1.2.0/fb/fbpict.h
+===================================================================
+--- xorg-server-1.2.0.orig/fb/fbpict.h	2012-03-31 00:08:50.000000000 +0200
++++ xorg-server-1.2.0/fb/fbpict.h	2012-03-31 00:08:51.000000000 +0200
 @@ -29,7 +29,7 @@
  #define _FBPICT_H_
  
@@ -3576,7 +3369,7 @@ index 73d7f1d..175ccc4 100644
  
  #if defined(__GNUC__)
  #define INLINE __inline__
-@@ -105,9 +105,6 @@ fbCanGetSolid(PicturePtr pict)
+@@ -105,9 +105,6 @@
      }
  }
  
@@ -3586,7 +3379,7 @@ index 73d7f1d..175ccc4 100644
  #define fbComposeGetSolid(pict, bits, fmt) { \
      FbBits	*__bits__; \
      FbStride	__stride__; \
-@@ -117,13 +114,13 @@ fbCanGetSolid(PicturePtr pict)
+@@ -117,13 +114,13 @@
      fbGetDrawable((pict)->pDrawable,__bits__,__stride__,__bpp__,__xoff__,__yoff__); \
      switch (__bpp__) { \
      case 32: \
@@ -3602,7 +3395,7 @@ index 73d7f1d..175ccc4 100644
  	(bits) = cvt0565to8888(bits); \
  	break; \
      default: \
-@@ -161,22 +158,22 @@ fbCanGetSolid(PicturePtr pict)
+@@ -161,22 +158,22 @@
  
  #if IMAGE_BYTE_ORDER == MSBFirst
  #define Fetch24(a)  ((unsigned long) (a) & 1 ? \
@@ -3637,7 +3430,7 @@ index 73d7f1d..175ccc4 100644
  #endif
  		      
  /*
-@@ -219,6 +216,43 @@ fbCanGetSolid(PicturePtr pict)
+@@ -219,6 +216,43 @@
          x += t;                                                     \
      } while (0)
  
@@ -3681,7 +3474,7 @@ index 73d7f1d..175ccc4 100644
  /*
    x_c = (x_c * a + y_c * b) / 255
  */
-@@ -362,6 +396,8 @@ fbCanGetSolid(PicturePtr pict)
+@@ -362,6 +396,8 @@
  #define FASTCALL
  #endif
  
@@ -3690,7 +3483,7 @@ index 73d7f1d..175ccc4 100644
  typedef FASTCALL void (*CombineMaskU) (CARD32 *src, const CARD32 *mask, int width);
  typedef FASTCALL void (*CombineFuncU) (CARD32 *dest, const CARD32 *src, int width);
  typedef FASTCALL void (*CombineFuncC) (CARD32 *dest, CARD32 *src, CARD32 *mask, int width);
-@@ -375,18 +411,7 @@ typedef struct _FbComposeFunctions {
+@@ -375,18 +411,7 @@
  /* fbcompose.c */
  
  void
@@ -3710,7 +3503,7 @@ index 73d7f1d..175ccc4 100644
  
  
  /* fbedge.c */
-@@ -411,200 +436,57 @@ CARD32
+@@ -411,200 +436,57 @@
  fbIn (CARD32 x, CARD8 y);
  
  void
@@ -3726,9 +3519,8 @@ index 73d7f1d..175ccc4 100644
 -			       INT16      yDst,
 -			       CARD16     width,
 -			       CARD16     height);
-+fbCompositeSolidMask_nx8x8888 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSolidMask_nx8x0888 (CARD8      op,
 -			       PicturePtr pSrc,
 -			       PicturePtr pMask,
@@ -3741,9 +3533,8 @@ index 73d7f1d..175ccc4 100644
 -			       INT16      yDst,
 -			       CARD16     width,
 -			       CARD16     height);
-+fbCompositeSolidMask_nx8x0888 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSolidMask_nx8888x8888C (CARD8      op,
 -				   PicturePtr pSrc,
 -				   PicturePtr pMask,
@@ -3756,9 +3547,8 @@ index 73d7f1d..175ccc4 100644
 -				   INT16      yDst,
 -				   CARD16     width,
 -				   CARD16     height);
-+fbCompositeSolidMask_nx8888x8888C (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSolidMask_nx8x0565 (CARD8      op,
 -			       PicturePtr pSrc,
 -			       PicturePtr pMask,
@@ -3771,9 +3561,8 @@ index 73d7f1d..175ccc4 100644
 -			       INT16      yDst,
 -			       CARD16     width,
 -			       CARD16     height);
-+fbCompositeSolidMask_nx8x0565 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSolidMask_nx8888x0565C (CARD8      op,
 -				   PicturePtr pSrc,
 -				   PicturePtr pMask,
@@ -3786,9 +3575,8 @@ index 73d7f1d..175ccc4 100644
 -				   INT16      yDst,
 -				   CARD16     width,
 -				   CARD16     height);
-+fbCompositeSolidMask_nx8888x0565C (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSrc_8888x8888 (CARD8      op,
 -			  PicturePtr pSrc,
 -			  PicturePtr pMask,
@@ -3801,9 +3589,8 @@ index 73d7f1d..175ccc4 100644
 -			  INT16      yDst,
 -			  CARD16     width,
 -			  CARD16     height);
-+fbCompositeSrc_8888x8888 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSrc_8888x0888 (CARD8      op,
 -			 PicturePtr pSrc,
 -			 PicturePtr pMask,
@@ -3816,9 +3603,8 @@ index 73d7f1d..175ccc4 100644
 -			 INT16      yDst,
 -			 CARD16     width,
 -			 CARD16     height);
-+fbCompositeSrc_8888x0888 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSrc_8888x0565 (CARD8      op,
 -			  PicturePtr pSrc,
 -			  PicturePtr pMask,
@@ -3831,9 +3617,8 @@ index 73d7f1d..175ccc4 100644
 -			  INT16      yDst,
 -			  CARD16     width,
 -			  CARD16     height);
-+fbCompositeSrc_8888x0565 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSrc_0565x0565 (CARD8      op,
 -			  PicturePtr pSrc,
 -			  PicturePtr pMask,
@@ -3846,9 +3631,8 @@ index 73d7f1d..175ccc4 100644
 -			  INT16      yDst,
 -			  CARD16     width,
 -			  CARD16     height);
-+fbCompositeSrc_0565x0565 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSrcAdd_8000x8000 (CARD8	op,
 -			     PicturePtr pSrc,
 -			     PicturePtr pMask,
@@ -3861,9 +3645,8 @@ index 73d7f1d..175ccc4 100644
 -			     INT16      yDst,
 -			     CARD16     width,
 -			     CARD16     height);
-+fbCompositeSrcAdd_8000x8000 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSrcAdd_8888x8888 (CARD8	op,
 -			     PicturePtr pSrc,
 -			     PicturePtr pMask,
@@ -3876,9 +3659,8 @@ index 73d7f1d..175ccc4 100644
 -			     INT16      yDst,
 -			     CARD16     width,
 -			     CARD16     height);
-+fbCompositeSrcAdd_8888x8888 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSrcAdd_1000x1000 (CARD8	op,
 -			     PicturePtr pSrc,
 -			     PicturePtr pMask,
@@ -3891,9 +3673,8 @@ index 73d7f1d..175ccc4 100644
 -			     INT16      yDst,
 -			     CARD16     width,
 -			     CARD16     height);
-+fbCompositeSrcAdd_1000x1000 (FbComposeData *params);
- 
- void
+-
+-void
 -fbCompositeSolidMask_nx1xn (CARD8      op,
 -			    PicturePtr pSrc,
 -			    PicturePtr pMask,
@@ -3906,6 +3687,42 @@ index 73d7f1d..175ccc4 100644
 -			    INT16      yDst,
 -			    CARD16     width,
 -			    CARD16     height);
++fbCompositeSolidMask_nx8x8888 (FbComposeData *params);
++
++void
++fbCompositeSolidMask_nx8x0888 (FbComposeData *params);
++
++void
++fbCompositeSolidMask_nx8888x8888C (FbComposeData *params);
++
++void
++fbCompositeSolidMask_nx8x0565 (FbComposeData *params);
++
++void
++fbCompositeSolidMask_nx8888x0565C (FbComposeData *params);
++
++void
++fbCompositeSrc_8888x8888 (FbComposeData *params);
++
++void
++fbCompositeSrc_8888x0888 (FbComposeData *params);
++
++void
++fbCompositeSrc_8888x0565 (FbComposeData *params);
++
++void
++fbCompositeSrc_0565x0565 (FbComposeData *params);
++
++void
++fbCompositeSrcAdd_8000x8000 (FbComposeData *params);
++
++void
++fbCompositeSrcAdd_8888x8888 (FbComposeData *params);
++
++void
++fbCompositeSrcAdd_1000x1000 (FbComposeData *params);
++
++void
 +fbCompositeSolidMask_nx1xn (FbComposeData *params);
  
  void

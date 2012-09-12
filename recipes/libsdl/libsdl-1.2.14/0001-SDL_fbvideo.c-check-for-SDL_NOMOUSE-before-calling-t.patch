@@ -1,0 +1,41 @@
+From 9a07feb50d52d5b9d65831e024d8f33c73408145 Mon Sep 17 00:00:00 2001
+From: Marko Katic <dromede.gmail.com>
+Date: Mon, 27 Aug 2012 22:45:56 +0200
+Subject: [PATCH] SDL_fbvideo.c: check for SDL_NOMOUSE before calling ts_option.
+
+SDL_NOMOUSE needs to be checked before calling ts_option. Failure to do
+so will result in a segfault in the case when no mouse or ts can be found.
+---
+ src/video/fbcon/SDL_fbvideo.c |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/src/video/fbcon/SDL_fbvideo.c b/src/video/fbcon/SDL_fbvideo.c
+index 365cace..b1da301 100644
+--- a/src/video/fbcon/SDL_fbvideo.c
++++ b/src/video/fbcon/SDL_fbvideo.c
+@@ -1037,17 +1037,20 @@ static SDL_Surface *FB_SetVideoMode(_THIS, SDL_Surface *current,
+ 			vinfo.xres = 240;
+ 			vinfo.yres = 320;
+ 			/* notify tslib of resolution change */
+-			ts_option(ts_dev, TS_SCREEN_RES, 240, 320);
++			if (!getenv("SDL_NOMOUSE"))
++				ts_option(ts_dev, TS_SCREEN_RES, 240, 320);
+ 			}
+ 		if (width == 640 && height == 480) {
+ 			vinfo.xres = 480;
+ 			vinfo.yres = 640;
+-			ts_option(ts_dev, TS_SCREEN_RES, 480, 640);
++			if (!getenv("SDL_NOMOUSE")) 
++				ts_option(ts_dev, TS_SCREEN_RES, 480, 640);
+ 			}
+ 			if ( ioctl(console_fd, FBIOPUT_VSCREENINFO, &vinfo) < 0 ) {
+ 				SDL_SetError("Couldn't set console screen info");
+ 				return(NULL);
+ 			}
++		
+ 
+ 	 else {
+ 		int maxheight;
+-- 
+1.7.4.1
+

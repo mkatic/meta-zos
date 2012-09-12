@@ -1,0 +1,55 @@
+diff --git a/src/video/fbcon/SDL_fbevents.c b/src/video/fbcon/SDL_fbevents.c
+index 1e215a9..c0c9824 100644
+--- a/src/video/fbcon/SDL_fbevents.c
++++ b/src/video/fbcon/SDL_fbevents.c
+@@ -1028,29 +1028,33 @@ static void handle_keyboard(_THIS)
+ 		/* Handle Ctrl-Alt-FN for vt switch */
+ 		switch (keysym.sym) {
+ 		    case SDLK_F1:
++		    	if (SDL_GetModState() & KMOD_SHIFT)
++		    			keysym.sym = SDLK_F6;
++		    	else if ((SDL_GetModState() & KMOD_CTRL))
++		    			keysym.sym = SDLK_F11;
++		    	break;
+ 		    case SDLK_F2:
++		    	if (SDL_GetModState() & KMOD_SHIFT)
++		    			keysym.sym = SDLK_F7;
++		    	else if ((SDL_GetModState() & KMOD_CTRL))
++		    			keysym.sym = SDLK_F12;
++		    	break;
+ 		    case SDLK_F3:
++		    	if (SDL_GetModState() & KMOD_SHIFT)
++		    			keysym.sym = SDLK_F8;
++		    	break;
+ 		    case SDLK_F4:
++		    	if (SDL_GetModState() & KMOD_SHIFT)
++		    			keysym.sym = SDLK_F9;
++		    	break;
+ 		    case SDLK_F5:
+-		    case SDLK_F6:
+-		    case SDLK_F7:
+-		    case SDLK_F8:
+-		    case SDLK_F9:
+-		    case SDLK_F10:
+-		    case SDLK_F11:
+-		    case SDLK_F12:
+-			if ( (SDL_GetModState() & KMOD_CTRL) &&
+-			     (SDL_GetModState() & KMOD_ALT) ) {
+-				if ( pressed ) {
+-					switch_vt(this, (keysym.sym-SDLK_F1)+1);
+-				}
+-				break;
+-			}
+-			/* Fall through to normal processing */
++		    	if (SDL_GetModState() & KMOD_SHIFT)
++		    			keysym.sym = SDLK_F10;
++		    	break;
+ 		    default:
+-			posted += SDL_PrivateKeyboard(pressed, &keysym);
+-			break;
++		    break;
+ 		}
++		posted += SDL_PrivateKeyboard(pressed, &keysym);
+ 	}
+ }
+ 

@@ -13,7 +13,7 @@ SRC_URI = "${SOURCEFORGE_MIRROR}/pcmanfm-mod/pcmanfm-mod-1.2.3.tar.xz \
 		   file://resize_desktop_on_rotate.patch \
 		   "
 
-SELECTED_OPTIMIZATION="-O0 -g -fno-omit-frame-pointer"
+#SELECTED_OPTIMIZATION="-O0 -g -fno-omit-frame-pointer"
 
 inherit autotools pkgconfig
 EXTRA_OECONF=" --disable-hal --disable-superuser-checks --disable-nls"

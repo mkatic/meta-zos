@@ -9,11 +9,22 @@ PR = "r0"
 SRC_URI="http://awesome.naquadah.org/download/awesome-${PV}.tar.bz2 \
 		file://add_luajit.patch \
 		file://remove_check.patch \
-		file://disable_dbus.patch \
 		file://remove_debug.patch \
 		"
 		
 inherit cmake
 
+do_install_append () {
+
+install -d ${D}/${sysconfdir}/xdg/awesome
+install -m 0644 ${D}/usr/etc/xdg/awesome/rc.lua ${D}/${sysconfdir}/xdg/awesome/rc.lua
+
+}
+
+FILES_${PN} +="/etc/* \
+				${datadir} \
+			  "
+
 SRC_URI[md5sum] = "cca11acbe9252121b10e969fce66e641"
 SRC_URI[sha256sum] = "83fc42d4ea71914d1b456023ce53b546e22e8ccc11a73c4a39a1152d2f30b628"
+

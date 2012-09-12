@@ -1,0 +1,58 @@
+From 2686930bfd9c26757e1e2281657ee7d04278a7e6 Mon Sep 17 00:00:00 2001
+From: Michael Natterer <mitch@gimp.org>
+Date: Tue, 14 Jul 2009 00:45:42 +0000
+Subject: Add gtk_widget_get_state() for accessing the sealed member "state"
+
+---
+Index: gtk+-2.16.6/gtk/gtk.symbols
+===================================================================
+--- gtk+-2.16.6.orig/gtk/gtk.symbols	2009-08-29 04:25:34.000000000 +0200
++++ gtk+-2.16.6/gtk/gtk.symbols	2012-03-22 18:51:41.000000000 +0100
+@@ -4921,6 +4921,7 @@
+ gtk_widget_get_settings
+ gtk_widget_get_size_request
+ gtk_widget_get_snapshot
++gtk_widget_get_state
+ gtk_widget_get_style
+ gtk_widget_get_tooltip_markup
+ gtk_widget_get_tooltip_text
+Index: gtk+-2.16.6/gtk/gtkwidget.c
+===================================================================
+--- gtk+-2.16.6.orig/gtk/gtkwidget.c	2009-08-29 04:07:54.000000000 +0200
++++ gtk+-2.16.6/gtk/gtkwidget.c	2012-03-22 18:51:41.000000000 +0100
+@@ -5401,6 +5401,21 @@
+     }
+ }
+ 
++/**
++ * gtk_widget_get_state:
++ * @widget: a #GtkWidget
++ *
++ * Returns: the state of @widget. See gtk_widget_set_state().
++ *
++ * Since: 2.18
++ **/
++GtkStateType
++gtk_widget_get_state (GtkWidget *widget)
++{
++  g_return_val_if_fail (GTK_IS_WIDGET (widget), GTK_STATE_NORMAL);
++
++  return widget->state;
++}
+ 
+ /**
+  * gtk_widget_set_app_paintable:
+Index: gtk+-2.16.6/gtk/gtkwidget.h
+===================================================================
+--- gtk+-2.16.6.orig/gtk/gtkwidget.h	2012-03-22 18:52:15.000000000 +0100
++++ gtk+-2.16.6/gtk/gtkwidget.h	2012-03-22 18:53:25.000000000 +0100
+@@ -556,7 +556,8 @@
+ 							 const gchar  *name);
+ G_CONST_RETURN gchar* gtk_widget_get_name               (GtkWidget    *widget);
+ void                  gtk_widget_set_state              (GtkWidget    *widget,
+-							 GtkStateType  state);
++							 GtkStateType  state);							 
++GtkStateType          gtk_widget_get_state              (GtkWidget    *widget);							 
+ void                  gtk_widget_set_sensitive          (GtkWidget    *widget,
+ 							 gboolean      sensitive);
+ void                  gtk_widget_set_app_paintable      (GtkWidget    *widget,

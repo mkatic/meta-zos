@@ -1,0 +1,22 @@
+Index: scummvm-1.3.1/base/main.cpp
+===================================================================
+--- scummvm-1.3.1.orig/base/main.cpp	2012-06-04 23:25:46.000000000 +0200
++++ scummvm-1.3.1/base/main.cpp	2012-06-04 23:26:11.000000000 +0200
+@@ -266,7 +266,7 @@
+ 
+ 	// Now create the global keymap
+ 	act = new Action(globalMap, "MENU", _("Menu"), kGenericActionType, kSelectKeyType);
+-	act->addKeyEvent(KeyState(KEYCODE_F5, ASCII_F5, 0));
++	act->addKeyEvent(KeyState(KEYCODE_F11, ASCII_F5, 0));
+ 
+ 	act = new Action(globalMap, "SKCT", _("Skip"), kGenericActionType, kActionKeyType);
+ 	act->addKeyEvent(KeyState(KEYCODE_ESCAPE, ASCII_ESCAPE, 0));
+@@ -281,7 +281,7 @@
+ 	act->addKeyEvent(KeyState(KEYCODE_F7, ASCII_F7, 0));
+ 
+ 	act = new Action(globalMap, "REMP", _("Remap keys"), kKeyRemapActionType);
+-	act->addKeyEvent(KeyState(KEYCODE_F8, ASCII_F8, 0));
++	act->addKeyEvent(KeyState(KEYCODE_F12, ASCII_F8, 0));
+ 
+ 	mapper->addGlobalKeymap(globalMap);
+ 

@@ -1,0 +1,93 @@
+diff --git a/src/video/fbcon/SDL_fbevents.c b/src/video/fbcon/SDL_fbevents.c
+index c0c9824..86780a0 100644
+--- a/src/video/fbcon/SDL_fbevents.c
++++ b/src/video/fbcon/SDL_fbevents.c
+@@ -56,6 +56,7 @@
+ #endif
+ 
+ char *tslib_rotation;
++int ts_rotated_cw;
+ 
+ /*#define DEBUG_KEYBOARD*/
+ /*#define DEBUG_MOUSE*/
+@@ -552,7 +553,11 @@ int FB_OpenMouse(_THIS)
+ 	mouse_fd = -1;
+ 
+ #if SDL_INPUT_TSLIB
++	
+ 	tslib_rotation = getenv("SDL_VIDEO_FBCON_ROTATION");
++	if (strcmp(tslib_rotation, "CW") == 0)
++		ts_rotated_cw = 1;
++		
+ 	if ( mousedrv && (SDL_strcmp(mousedrv, "TSLIB") == 0) ) {
+ 		if (mousedev == NULL) mousedev = SDL_getenv("TSLIB_TSDEVICE");
+ 		if (mousedev != NULL) {
+@@ -742,38 +747,56 @@ void FB_vgamousecallback(int button, int relative, int dx, int dy)
+ /* Handle input from tslib */
+ #if SDL_INPUT_TSLIB
+ static void handle_tslib(_THIS)
+-{
+-	struct ts_sample sample;
++{	
+ 	int button;
++	int nr_samples = 3;
++	static int prev_x, prev_y;
+ 	static int toggled_button = 4; /*default to left mouse button */
+-	while (ts_read(ts_dev, &sample, 1) > 0){
+-		if(sample.y > (SDL_VideoSurface->w + 100)) /* ugly hack since sample.y can get abnormally high for no reason */
+-			continue;
++	struct ts_sample sample;
++
++	while (nr_samples--)
++	ts_read(ts_dev, &sample, 1);
++	
++		if ((sample.x > 10000) || (sample.y > 10000)) /* coords can get abnormally big, i dont know why */
++			return;
++			
+ 		if (sample.y > SDL_VideoSurface->w){
+-			if (sample.pressure > 0) {
+-				if (sample.x < (SDL_VideoSurface->h / 2))
++			if (sample.pressure) {
++				if (sample.x < (SDL_VideoSurface->h / 2)) {
+ 					toggled_button = 1; /* right mouse button toggle, lower half */
+-				else
++					sample.x = prev_x;
++					sample.y = prev_y;
++				}
++				else {
+ 					toggled_button = 4; /* left mouse button toggle, upper half */
++					sample.x = prev_x;
++					sample.y = prev_y;
++				}
+ 			}
+-			else {
++			else {  /* pen up */
+ 				button = 0;
++				sample.x = prev_x;
++				sample.y = prev_y;
+ 			}
+ 		}
+ 		else {
+ 			if (sample.pressure) {
+ 				button = toggled_button;
++				prev_x = sample.x;
++				prev_y = sample.y;
+ 			}
+ 			else {
+ 				button = 0;
++				prev_x = sample.x;
++				prev_y = sample.y;
+ 			}
+ 		}
+-		if (strcmp(tslib_rotation, "CW") == 0) {
++		if (ts_rotated_cw) {
+ 			FB_vgamousecallback(button, 0, sample.y, (SDL_VideoSurface->h - sample.x));
+ 			return;
+ 		}
+-		FB_vgamousecallback(button, 0, sample.x, sample.y);
+-	}
++		else
++			FB_vgamousecallback(button, 0, sample.x, sample.y);
+ 	return;
+ }
+ #endif /* SDL_INPUT_TSLIB */

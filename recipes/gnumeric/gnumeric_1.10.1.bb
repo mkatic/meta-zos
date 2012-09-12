@@ -32,12 +32,6 @@ do_configure_append () {
 	find -name Makefile -exec sed -i '/\/usr\/bin\/orbit-idl-2/{s:/usr/bin:${STAGING_BINDIR_NATIVE}:;s:/usr/share:${STAGING_DATADIR}:g}' {} \;
 }
 
-python populate_packages_prepend () {
-	gnumeric_libdir = bb.data.expand('${libdir}/gnumeric/${PV}/plugins', d)
-
-	do_split_packages(d, gnumeric_libdir, '(.*)', 'gnumeric-plugin-%s', 'Gnumeric plugin for %s', allow_dirs=True)
-}
-
 SRC_URI[md5sum] = "80daf446f299578d05e60e9b7d38900c"
 SRC_URI[sha256sum] = "91a0a9aa47ae82b14fe717e5d49d164cfe871add2bf71d0cb2f68cf3d383c9db"
 

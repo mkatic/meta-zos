@@ -1,0 +1,13 @@
+Index: libfm-0.1.17/src/gtk/fm-places-model.c
+===================================================================
+--- libfm-0.1.17.orig/src/gtk/fm-places-model.c	2012-03-22 19:42:54.000000000 +0100
++++ libfm-0.1.17/src/gtk/fm-places-model.c	2012-03-22 19:43:33.000000000 +0100
+@@ -522,7 +522,7 @@
+     gtk_list_store_append(model, &it);
+     pix = fm_icon_get_pixbuf(item->fi->icon, fm_config->pane_icon_size);
+     gtk_list_store_set(model, &it, FM_PLACES_MODEL_COL_ICON, pix, FM_PLACES_MODEL_COL_LABEL, _("Applications"), FM_PLACES_MODEL_COL_INFO, item, -1);
+-    g_object_unref(pix);
++ //   g_object_unref(pix);
+     /* fm_file_info_job_add(job, item->fi->path); */
+ 
+     /* volumes */

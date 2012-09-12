@@ -1,0 +1,116 @@
+diff --git a/popup_run_prompt/init.lua b/popup_run_prompt/init.lua
+index 8e357a9..f49dfea 100644
+--- a/popup_run_prompt/init.lua
++++ b/popup_run_prompt/init.lua
+@@ -61,7 +61,6 @@ function ensure_init()
+     if inited then
+     return
+     end
+-
+     inited = true
+     for s = 1, screen.count() do
+         mypromptbox[s] = widget({
+@@ -96,8 +95,7 @@ function set_default(s)
+         height = settings.height,
+         x = screen[s].geometry.x + screen[s].geometry.width *
+             ((1 - settings.width) / 2),
+-        y = screen[s].geometry.y + screen[s].geometry.height -
+-            settings.height,
++        y = screen[s].geometry.y,
+     })
+ end
+ 
+@@ -107,14 +105,24 @@ function do_slide_up()
+     runwibox[s]:geometry({
+         y = startgeom.y - settings.move_amount
+     })
+-
+-    if runwibox[s]:geometry().y <= screen[s].geometry.y +
+-            screen[s].geometry.height - startgeom.height then
+-        set_default(s)
++	if runwibox[s]:geometry().y <= screen[s].geometry.y - settings.height then
++        runwibox[s].visible = false
+         lib.hooks.timer.stop(do_slide_up)
+     end
+ end
+ 
++function do_slide_down()
++    local s = runwibox.screen
++    startgeom = runwibox[s]:geometry()
++    runwibox[s]:geometry({
++        y = startgeom.y + settings.move_amount,
++    })
++	if runwibox[s]:geometry().y >= screen[s].geometry.y then                       
++        set_default(s)
++        lib.hooks.timer.stop(do_slide_down)
++        end
++end
++
+ function show_wibox(s)
+     runwibox.screen = s
+     if settings.slide == true then
+@@ -126,15 +134,15 @@ function show_wibox(s)
+         -- to "top".
+         runwibox[s].visible = true
+         runwibox[s]:geometry({
+-            y = screen[s].geometry.y + screen[s].geometry.height,
++            y = screen[s].geometry.y - settings.height,
+         })
+-        if lib.hooks.timer.has(do_slide_up) then
+-            lib.hooks.timer.start(do_slide_up)
++        if lib.hooks.timer.has(do_slide_down) then
++            lib.hooks.timer.start(do_slide_down)
+         else
+             lib.hooks.timer.register(settings.move_speed,
+                                      settings.move_speed*3,
+-                                     do_slide_up,
+-                                     "popup_run_prompt slide up")
++                                     do_slide_down,
++                                     "popup_run_prompt slide down")
+         end
+     else
+         set_default(s)
+@@ -142,20 +150,6 @@ function show_wibox(s)
+     end
+ end
+ 
+-function do_slide_down()
+-    local s = runwibox.screen
+-    startgeom = runwibox[s]:geometry()
+-    runwibox[s]:geometry({
+-        y = startgeom.y + settings.move_amount,
+-    })
+-
+-    if runwibox[s]:geometry().y >= screen[s].geometry.y +
+-            screen[s].geometry.height then
+-        runwibox[s].visible = false
+-        lib.hooks.timer.stop(do_slide_down)
+-    end
+-end
+-
+ function hide_wibox()
+     local s = runwibox.screen or mouse.screen
+ 
+@@ -163,13 +157,13 @@ function hide_wibox()
+         runwibox[s].visible = true
+         set_default(s)
+ 
+-        if lib.hooks.timer.has(do_slide_down) then
+-            lib.hooks.timer.start(do_slide_down)
++        if lib.hooks.timer.has(do_slide_up) then
++            lib.hooks.timer.start(do_slide_up)
+         else
+             lib.hooks.timer.register(settings.move_speed,
+                                      settings.move_speed*3,
+-                                     do_slide_down,
+-                                     "popup_run_prompt slide down")
++                                     do_slide_up,
++                                     "popup_run_prompt slide up")
+         end
+     else
+         set_default(s)
+@@ -261,3 +255,4 @@ function set_cache(c)
+     settings.cache = c or defaults.cache
+ end
+ 
++

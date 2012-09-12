@@ -1,0 +1,1 @@
+CFLAGS =+ "-flax-vector-conversions"

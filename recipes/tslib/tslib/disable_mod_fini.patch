@@ -1,0 +1,47 @@
+commit 106d5029d8423c3fb5123c0cf43078345c4e62c4
+Author: Marko Katic <dromede.gmail.com>
+Date:   Tue Jun 5 01:05:06 2012 +0200
+
+    ts_close.c: temporarily disable mod_fini.
+    median.c: remove debug printf's.
+
+diff --git a/plugins/median.c b/plugins/median.c
+index 83d3155..f9b203b 100644
+--- a/plugins/median.c
++++ b/plugins/median.c
+@@ -113,13 +113,11 @@ static int median_read(struct tslib_module_info *inf, struct ts_sample *samp, in
+                 /* Flush the line we now must wait for c->size / 2 samples untill we get valid data again */
+                 memset( c->delay, 0, sizeof( struct ts_sample) * c->size );
+                 c->withsamples = 0;
+-                printf("Pen Up\n");
+                 s->pressure = cpress;
+             }
+             else if( (cpress != 0) && (c->withsamples == 0) )
+             { /* We have pen down */
+                 c->withsamples = 1;
+-                printf("Pen Down\n");
+             }
+         }
+     }
+@@ -191,7 +189,7 @@ TSAPI struct tslib_module_info *median_mod_init(struct tsdev *dev __attribute__(
+         printf("Using default size of 3\n");
+     }
+ 
+-	return &(c->module);
++	return &c->module;
+ }
+ 
+ #ifndef TSLIB_STATIC_MEDIAN_MODULE
+diff --git a/src/ts_close.c b/src/ts_close.c
+index fde4c3e..a14d4dd 100644
+--- a/src/ts_close.c
++++ b/src/ts_close.c
+@@ -28,7 +28,7 @@ int ts_close(struct tsdev *ts)
+ 	    info != NULL;
+ 	    info = prev->next, prev = info) {
+ 		handle = info->handle;
+-		info->ops->fini(info);
++	//	info->ops->fini(info);
+ 		if (handle)
+ 			dlclose(handle);
+ 	}

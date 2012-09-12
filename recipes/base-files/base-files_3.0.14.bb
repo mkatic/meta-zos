@@ -11,7 +11,9 @@ SRC_URI = " \
            file://fstab \
            file://inputrc \
            file://issue  \
-           file://Cxx0_binary_keymap_pdaxrom_r198 \
+           file://motd	\
+           file://rotation \
+           file://Zaurus_binary_keymap \
            file://licenses/BSD \
            file://licenses/GPL-2 \
            file://licenses/GPL-3 \
@@ -19,8 +21,8 @@ SRC_URI = " \
            file://licenses/LGPL-2.1 \
            file://licenses/LGPL-3 \
            file://licenses/GFDL-1.2 \
-           file://usb-auto \
-           file://licenses/Artistic"
+           file://licenses/Artistic \
+           " 
 
 S = "${WORKDIR}"
 
@@ -39,11 +41,9 @@ dirs755 = "/bin /boot /dev /proc /sys ${sysconfdir} ${sysconfdir}/default ${sysc
 	   ${localstatedir}/volatile/lock/subsys \
 	   ${localstatedir}/volatile/log \
 	   ${localstatedir}/volatile/run \
-	   /mnt /media /media/card /media/cf /media/net \
-	    /media/hdd \
-	   /media/mmc1"
+	   /mnt /media"
 
-media = "card cf net ram"
+media = ""
 
 
 volatiles = "cache run log lock tmp"
@@ -55,7 +55,7 @@ conffiles = "${sysconfdir}/debian_version ${sysconfdir}/host.conf \
 #
 # set standard hostname, might be a candidate for a DISTRO variable? :M:
 #
-hostname = "Zos"
+hostname = "zaurus"
 
 do_install_basefilesissue () {
 	if [ -n "${MACHINE}" -a "${hostname}" = "openembedded" ]; then
@@ -65,7 +65,6 @@ do_install_basefilesissue () {
 	fi
 
 	install -m 644 ${WORKDIR}/issue*  ${D}${sysconfdir}
-		echo 	"^[[H^[[2J" >> ${D}${sysconfdir}/issue
         if [ -n "${DISTRO_NAME}" ]; then
 		echo -n "${DISTRO_NAME} " >> ${D}${sysconfdir}/issue
 		if [ -n "${DISTRO_VERSION}" ]; then
@@ -101,13 +100,14 @@ do_install () {
 		echo ${hostname} > ${D}${sysconfdir}/hostname
 	fi      
 			install -m 0755 ${WORKDIR}/bl ${D}${bindir}/bl
-			install -m 0644 ${WORKDIR}/Cxx0_binary_keymap_pdaxrom_r198 ${D}${sysconfdir}/Cxx0_binary_keymap_pdaxrom_r198
+			install -m 0644 ${WORKDIR}/Zaurus_binary_keymap ${D}${sysconfdir}/Zaurus_binary_keymap
             install -m 0644 ${WORKDIR}/fstab ${D}${sysconfdir}/fstab
 			install -m 0644 ${WORKDIR}/profile ${D}${sysconfdir}/profile
+			install -m 0644 ${WORKDIR}/motd ${D}${sysconfdir}/motd
         	install -m 0644 ${WORKDIR}/inputrc ${D}${sysconfdir}/inputrc
 	        ln -sf /proc/mounts ${D}${sysconfdir}/mtab
         	install -m 0644 ${WORKDIR}/host.conf ${D}${sysconfdir}/host.conf
-        	install -m 0755 ${WORKDIR}/usb-auto ${D}${bindir}/usb-auto
+        	install -m 0644 ${WORKDIR}/rotation ${D}${sysconfdir}/rotation
         	
 	do_install_basefilesissue
 }

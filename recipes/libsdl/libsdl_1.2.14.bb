@@ -5,8 +5,11 @@ DEPENDS_avr32 += "alsa-lib virtual/libx11 libxext tslib"
 LIC_FILES_CHKSUM="file://COPYING;md5=27818cd7fd83877a8e3ef82b82798ef4"
 PR = "${INC_PR}.8"
 
+#SELECTED_OPTIMIZATION="-O0 -g -fno-omit-frame-pointer"
+
+
 EXTRA_OECONF = " \
-  --disable-static --disable-debug --disable-cdrom --enable-threads --enable-timers --enable-endian \
+  --disable-debug --disable-cdrom --enable-threads --enable-timers --enable-endian \
   --enable-file --enable-oss --enable-alsa --disable-esd --disable-arts \
   --disable-diskaudio --disable-nas --disable-esd-shared --disable-esdtest \
   --disable-mintaudio --disable-nasm --enable-video-x11 --disable-video-dga \

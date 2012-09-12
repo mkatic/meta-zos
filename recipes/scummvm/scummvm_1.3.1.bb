@@ -14,7 +14,7 @@ SRC_URI_OVERRIDES_PACKAGE_ARCH = "1"
 # These plugins are not normal Linux shared libs so will fall foul of the sanity checker.
 INSANE_SKIP_${PN} = "True"
 EXTRA_OECONF += " --enable-plugins --enable-release --default-dynamic \
-				  --disable-scalers --disable-hq-scalers --disable-translation"
+				  --disable-hq-scalers --disable-translation"
 
 # Workaround, because some env variables aren't recognised correctly
 do_configure_append() {

@@ -3,12 +3,13 @@ HOMEPAGE = "http://www.scummvm.org"
 SECTION = "games"
 PRIORITY = "optional"
 LICENSE = "GPL"
-LIC_FILES_CHKSUM="file://COPYING;md5=ebf4e8b49780ab187d51bd26aaa022c6"
+LIC_FILES_CHKSUM="file://COPYING;md5=441c28d2cf86e15a37fa47e15a72fbac"
 
 INC_PR = "r7"
 
 SRC_URI = "${SOURCEFORGE_MIRROR}/scummvm/scummvm-${PV}.tar.bz2 \
 		   file://fix_strip_usage.patch"
+
 
 inherit autotools 
 
@@ -19,7 +20,6 @@ EXTRA_OECONF = "--host=${HOST_SYS} \
 		--prefix=${prefix} \
 		--with-ogg-prefix=${STAGING_LIBDIR}/.. \
 		--with-tremor-prefix=${STAGING_LIBDIR}/.. \
-		${@base_conditional('ENTERPRISE_DISTRO', '1', '--disable-mpeg2', '--with-mpeg2-prefix=${STAGING_LIBDIR}/..', d)} \
 		${@base_conditional('ENTERPRISE_DISTRO', '1', '--disable-mad', '--with-mad-prefix=${STAGING_LIBDIR}/..', d)} \
 		"
 

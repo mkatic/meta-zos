@@ -1,0 +1,313 @@
+diff --git a/src/video/fbcon/SDL_fbvideo.c b/src/video/fbcon/SDL_fbvideo.c
+index 365cace..c9c3ae3 100644
+--- a/src/video/fbcon/SDL_fbvideo.c
++++ b/src/video/fbcon/SDL_fbvideo.c
+@@ -133,9 +133,98 @@ static void FB_SavePalette(_THIS, struct fb_fix_screeninfo *finfo,
+                                   struct fb_var_screeninfo *vinfo);
+ static void FB_RestorePalette(_THIS);
+ 
+-/* Shadow buffer functions */
+-static FB_bitBlit FB_blit16;
+-static FB_bitBlit FB_blit16blocked;
++/* __attribute__((naked)) prevents the compiler from adding entry and exit routines to the function */
++
++static __attribute__((naked,inline)) void iwmmxt_rotate_copy(void *src, void *dst, int width, int height) {
++
++asm  volatile (
++	".arch iwmmxt\n\t"
++	"stmfd   sp!,{r4-r8,lr}\n\t"
++	"mov r6, #16\n\t"
++	"mov r7, #32\n\t"
++	"mov r4, r0\n\t"
++	"mov r5, r1\n\t"
++	"mov r8, r2\n\t"
++	"tmcr wcgr0, r6\n\t"
++	"tmcr wcgr1, r7\n\t"
++	"iwmmxt_rotate_copy_main_loop:\n\t"
++	"wldrd wr0,[r0]\n\t"
++	"add r0, r0, #640\n\t"
++	"wldrd wr1,[r0]\n\t"
++	"add r0, r0, #640\n\t"
++	"wldrd wr2,[r0]\n\t"
++	"add r0, r0, #640\n\t"
++	"wldrd wr3,[r0]\n\t"
++	"add r0, r0, #640\n\t"
++	"wldrd wr8,[r0]\n\t"
++	"add r0, r0, #640\n\t"
++	"wunpckihh wr4, wr0, wr1\n\t"
++	"wunpckihh wr5, wr2, wr3\n\t"
++	"wldrd wr9,[r0]\n\t"
++	"add r0, r0, #640\n\t"
++	"wunpckilh wr6, wr0, wr1\n\t"
++	"wunpckilh wr7, wr2, wr3\n\t"
++	"wldrd wr10,[r0]\n\t"
++	"add r0, r0, #640\n\t"
++	"wunpckihw wr0, wr4, wr5\n\t"
++	"wunpckilw wr1, wr4, wr5\n\t"
++	"wldrd wr11,[r0]\n\t"
++	"add r0, r0, #640\n\t"
++	"wunpckihw wr2, wr6, wr7\n\t"
++	"wunpckilw wr3, wr6, wr7\n\t"
++	"wunpckihh wr12, wr8, wr9\n\t"
++	"wunpckihh wr13, wr10, wr11\n\t"
++	"wunpckilh wr14, wr8, wr9\n\t"
++	"wunpckilh wr15, wr10, wr11\n\t"
++	"wunpckihw wr8, wr12, wr13\n\t"
++	"wunpckilw wr9, wr12, wr13\n\t"
++	"wunpckihw wr10, wr14, wr15\n\t"
++	"wunpckilw wr11, wr14, wr15\n\t"
++	"wrorwg wr11, wr11, wcgr0\n\t"
++	"wrordg wr11, wr11, wcgr1\n\t"
++	"wstrd wr11,[r1]\n\t"
++	"wrorwg wr3, wr3, wcgr0\n\t"
++	"wrordg wr3, wr3, wcgr1\n\t"
++	"wstrd wr3,[r1, #8]\n\t"
++	"add r1, r1, #480\n\t"
++	"wrorwg wr10, wr10, wcgr0\n\t"
++	"wrordg wr10, wr10, wcgr1\n\t"
++	"wstrd wr10,[r1]\n\t"
++	"wrorwg wr2, wr2, wcgr0\n\t"
++	"wrordg wr2, wr2, wcgr1\n\t"
++	"wstrd wr2,[r1, #8]\n\t"
++	"add r1, r1, #480\n\t"
++	"wrorwg wr9, wr9, wcgr0\n\t"
++	"wrordg wr9, wr9, wcgr1\n\t"
++	"wstrd wr9,[r1]\n\t"
++	"wrorwg wr1, wr1, wcgr0\n\t"
++	"wrordg wr1, wr1, wcgr1\n\t"
++	"wstrd wr1,[r1, #8]\n\t"
++	"add r1, r1, #480\n\t"
++	"wrorwg wr8, wr8, wcgr0\n\t"
++	"wrordg wr8, wr8, wcgr1\n\t"
++	"wstrd wr8,[r1]\n\t"
++	"wrorwg wr0, wr0, wcgr0\n\t"
++	"wrordg wr0, wr0, wcgr1\n\t"
++	"wstrd wr0,[r1, #8]\n\t"
++	"add r1, r1, #480\n\t"
++	"subs r2, r2, #4\n\t"
++	"bleq next_line\n\t"
++	"addne r4, r4, #8\n\t"
++	"mov r0, r4\n\t"
++	"b iwmmxt_rotate_copy_main_loop\n\t"
++	"next_line:\n\t"
++	"subs r3, r3, #8\n\t"
++	"beq exit\n\t"
++	"add r4, r4, #640 * 7\n\t"
++	"sub r5, r5, #16\n\t"
++	"mov r1, r5\n\t"
++	"mov r2, r8\n\t"
++	"mov pc, lr	\n\t"
++	"exit:\n\t"
++	"ldmfd   sp!,{r4-r8,pc}"
++);
++}
+ 
+ static int SDL_getpagesize(void)
+ {
+@@ -1112,23 +1201,6 @@ static SDL_Surface *FB_SetVideoMode(_THIS, SDL_Surface *current,
+ 	/* Save hardware palette, if needed */
+ 	FB_SavePalette(this, &finfo, &vinfo);
+ 
+-	if (shadow_fb) {
+-		if (vinfo.bits_per_pixel == 16) {
+-			blitFunc = (rotate == FBCON_ROTATE_NONE ||
+-					rotate == FBCON_ROTATE_UD) ?
+-				FB_blit16 : FB_blit16blocked;
+-		} else {
+-#ifdef FBCON_DEBUG
+-			fprintf(stderr, "Init vinfo:\n");
+-			print_vinfo(&vinfo);
+-#endif
+-			SDL_SetError("Using software buffer, but no blitter "
+-					"function is available for %d bpp.",
+-					vinfo.bits_per_pixel);
+-			return(NULL);
+-		}
+-	}
+-
+ 	/* Set up the new mode framebuffer */
+ 	current->flags &= SDL_FULLSCREEN;
+ 	if (shadow_fb) {
+@@ -1442,89 +1514,32 @@ static int FB_FlipHWSurface(_THIS, SDL_Surface *surface)
+ 	return(0);
+ }
+ 
+-static void FB_blit16(Uint8 *byte_src_pos, int src_right_delta, int src_down_delta,
+-		Uint8 *byte_dst_pos, int dst_linebytes, int width, int height)
+-{
+-	int w;
+-	Uint16 *src_pos = (Uint16 *)byte_src_pos;
+-	Uint16 *dst_pos = (Uint16 *)byte_dst_pos;
+-
+-	while (height) {
+-		Uint16 *src = src_pos;
+-		Uint16 *dst = dst_pos;
+-		for (w = width; w != 0; w--) {
+-			*dst = *src;
+-			src += src_right_delta;
+-			dst++;
+-		}
+-		dst_pos = (Uint16 *)((Uint8 *)dst_pos + dst_linebytes);
+-		src_pos += src_down_delta;
+-		height--;
+-	}
+-}
+-
+-#define BLOCKSIZE_W 32
+-#define BLOCKSIZE_H 32
+-
+-static void FB_blit16blocked(Uint8 *byte_src_pos, int src_right_delta, int src_down_delta, 
+-		Uint8 *byte_dst_pos, int dst_linebytes, int width, int height)
+-{
+-	int w;
+-	Uint16 *src_pos = (Uint16 *)byte_src_pos;
+-	Uint16 *dst_pos = (Uint16 *)byte_dst_pos;
+-
+-	while (height > 0) {
+-		Uint16 *src = src_pos;
+-		Uint16 *dst = dst_pos;
+-		for (w = width; w > 0; w -= BLOCKSIZE_W) {
+-			FB_blit16((Uint8 *)src,
+-					src_right_delta,
+-					src_down_delta,
+-					(Uint8 *)dst,
+-					dst_linebytes,
+-					min(w, BLOCKSIZE_W),
+-					min(height, BLOCKSIZE_H));
+-			src += src_right_delta * BLOCKSIZE_W;
+-			dst += BLOCKSIZE_W;
+-		}
+-		dst_pos = (Uint16 *)((Uint8 *)dst_pos + dst_linebytes * BLOCKSIZE_H);
+-		src_pos += src_down_delta * BLOCKSIZE_H;
+-		height -= BLOCKSIZE_H;
+-	}
+-}
+-
+ static void FB_DirectUpdate(_THIS, int numrects, SDL_Rect *rects)
+ {
++//	printf("shadow start address:%p\n", shadow_mem);
++
+ 	int width = cache_vinfo.xres;
+ 	int height = cache_vinfo.yres;
+-	int bytes_per_pixel = (cache_vinfo.bits_per_pixel + 7) / 8;
+ 	int i;
++	int x, y, rect_width, rect_height;
++	short unsigned int *src_start;
++	short unsigned int *dst_start;
+ 
+ 	if (!shadow_fb) {
+ 		/* The application is already updating the visible video memory */
+ 		return;
+ 	}
+ 
+-	if (cache_vinfo.bits_per_pixel != 16) {
+-		SDL_SetError("Shadow copy only implemented for 16 bpp");
+-		return;
+-	}
+-
+ 	for (i = 0; i < numrects; i++) {
+-		int x1, y1, x2, y2;
+-		int scr_x1, scr_y1, scr_x2, scr_y2;
+-		int sha_x1, sha_y1;
+-		int shadow_right_delta;  /* Address change when moving right in dest */
+-		int shadow_down_delta;   /* Address change when moving down in dest */
+-		char *src_start;
+-		char *dst_start;
+-
+-		x1 = rects[i].x; 
+-		y1 = rects[i].y;
+-		x2 = x1 + rects[i].w; 
+-		y2 = y1 + rects[i].h;
+ 
++		x = rects[i].x;
++		y = rects[i].y;
++		rect_width = rects[i].w;
++		rect_height = rects[i].h;
++
++		/*
+ 		if (x1 < 0) {
++
+ 			x1 = 0;
+ 		} else if (x1 > width) {
+ 			x1 = width;
+@@ -1547,63 +1562,23 @@ static void FB_DirectUpdate(_THIS, int numrects, SDL_Rect *rects)
+ 		if (x2 <= x1 || y2 <= y1) {
+ 			continue;
+ 		}
+-
+-		switch (rotate) {
+-			case FBCON_ROTATE_NONE:
+-				sha_x1 = scr_x1 = x1;
+-				sha_y1 = scr_y1 = y1;
+-				scr_x2 = x2;
+-				scr_y2 = y2;
+-				shadow_right_delta = 1;
+-				shadow_down_delta = width;
+-				break;
+-			case FBCON_ROTATE_CCW:
+-				scr_x1 = y1;
+-				scr_y1 = width - x2;
+-				scr_x2 = y2;
+-				scr_y2 = width - x1;
+-				sha_x1 = x2 - 1;
+-				sha_y1 = y1;
+-				shadow_right_delta = width;
+-				shadow_down_delta = -1;
+-				break;
+-			case FBCON_ROTATE_UD:
+-				scr_x1 = width - x2;
+-				scr_y1 = height - y2;
+-				scr_x2 = width - x1;
+-				scr_y2 = height - y1;
+-				sha_x1 = x2 - 1;
+-				sha_y1 = y2 - 1;
+-				shadow_right_delta = -1;
+-				shadow_down_delta = -width;
+-				break;
+-			case FBCON_ROTATE_CW:
+-				scr_x1 = height - y2;
+-				scr_y1 = x1;
+-				scr_x2 = height - y1;
+-				scr_y2 = x2;
+-				sha_x1 = x1;
+-				sha_y1 = y2 - 1;
+-				shadow_right_delta = -width;
+-				shadow_down_delta = 1;
+-				break;
+-			default:
+-				SDL_SetError("Unknown rotation");
+-				return;
+-		}
+-
+-		src_start = shadow_mem +
+-			(sha_y1 * width + sha_x1) * bytes_per_pixel;
+-		dst_start = mapped_mem + mapped_offset + scr_y1 * physlinebytes + 
+-			scr_x1 * bytes_per_pixel;
+-
+-		blitFunc((Uint8 *) src_start,
+-				shadow_right_delta, 
+-				shadow_down_delta, 
+-				(Uint8 *) dst_start,
+-				physlinebytes,
+-				scr_x2 - scr_x1,
+-				scr_y2 - scr_y1);
++		*/
++	//	printf("w, h before rounding:%d:%d\n", rect_width, rect_height);
++		while (x & (7 << 0))
++    			x--;
++    	while (rect_width & (7 << 0))
++    			rect_width++;
++    	while (y & (7 << 0))
++    			y--;
++    	while (rect_height & (7 << 0))
++    			rect_height++;
++
++		src_start = shadow_mem + (y * 320) + x;
++		dst_start = mapped_mem + (240 - 8 - y) + (x * 240);
++
++		printf("rect width:%d, height:%d after rounding\n", rect_width, rect_height);
++		printf("shadow: %p, fb: %p\n", src_start, dst_start);
++		iwmmxt_rotate_copy(src_start, 0xc4c000e8, rect_width, rect_height);
+ 	}
+ }
+ 

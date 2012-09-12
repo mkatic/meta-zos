@@ -1,23 +1,31 @@
 HOME="/home/root"
 PATH="/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:usr/local/sbin"
-EDITOR="/usr/bin/nano"			# needed for packages like cron
+EDITOR="/usr/bin/vi"			# needed for packages like cron
 TERM="linux"
 PS1='\w|->'
 
 #TSLIB config
-export TSLIB_TSDEVICE=/dev/input/event2
+export TSLIB_TSDEVICE=/dev/input/touchscreen0
 export TSLIB_TSEVENTTYPE=INPUT
 export TSLIB_CONFFILE=/etc/ts.conf
 export TSLIB_CALIBFILE=/etc/pointercal
 
+#Check for calibration data
+if [ ! -f /etc/pointercal ]; then
+	ts_calibrate > /dev/null 2>&1
+fi
+
 #SDL config
 export SDL_VIDEO_FBCON_ROTATION=CW
-export SDL_MOUSEDEV=/dev/input/event2
-export SDL_AUDIODRIVER=alsa
+export SDL_MOUSEDEV=/dev/input/touchscreen0
+export SDL_AUDIODRIVER=dsp
 export SDL_MOUSEDRV=TSLIB
 
 #Load keymap
-loadkmap < /etc/Cxx0_binary_keymap_pdaxrom_r198
+loadkmap < /etc/Zaurus_binary_keymap
 
+#load OSS emulation modules
+modprobe snd-pcm-oss
+ 
 alias ls='ls --color=auto'
 

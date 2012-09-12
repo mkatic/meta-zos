@@ -8,7 +8,7 @@ SRCREV = "346"
 PV = "0.1.7+svnr${SRCPV}"
 PR = "r0"
 
-SRC_URI = "svn://svn.emma-soft.com/epdfview;module=trunk;proto=svn \
+SRC_URI = "svn://svn.emma-soft.com/epdfview;module=trunk;protocol=svn \
 	  "
 SRC_URI_append_shr = "file://acroread.png \
                      "

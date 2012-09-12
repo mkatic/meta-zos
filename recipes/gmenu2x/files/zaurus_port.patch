@@ -1,0 +1,440 @@
+diff --git a/configure.in b/configure.in
+index 43137ac..ba50bbf 100644
+--- a/configure.in
++++ b/configure.in
+@@ -44,6 +44,11 @@ case "$GMENU2X_PLATFORM" in
+ 		PLATFORM="pandora"
+ 		SCREEN_RES="800x480"
+ 	;;
++	zaurus)
++		AC_DEFINE(PLATFORM_ZAURUS)
++		PLATFORM="zaurus"
++		SCREEN_RES="320x240"
++	;;
+ 	default)
+ 		AC_MSG_WARN([*** No --enable-platform specified. Defaulting to "pc".])
+ 		AC_DEFINE(PLATFORM_PC)
+diff --git a/data/platform/zaurus/about.txt b/data/platform/zaurus/about.txt
+new file mode 100644
+index 0000000..ddeeedb
+--- /dev/null
++++ b/data/platform/zaurus/about.txt
+@@ -0,0 +1,19 @@
++GMenu2X has been created by Massimiliano "Ryo" Torromeo, and is released under the GPL-v2 license.
++
++This version is maintained by the Qi-Hardware and OpenDingux crew. The credits, as well as the latest source code can be found here:
++http://projects.qi-hardware.com/index.php/p/gmenu2x
++
++Credits for the translations:
++-----
++English & Italian by Massimiliano Torromeo
++French by Yodaz
++Danish by claus
++Dutch by superfly
++Spanish by pedator
++Portuguese (Portugal) by NightShadow
++Slovak by Jozef
++Swedish by Esslan and Micket
++German by fusion_power, johnnysnet and Waldteufel
++Finnish by Jontte and Atte
++Norwegian by cowai
++Russian by XaMMaX90
+diff --git a/data/platform/zaurus/gmenu2x.conf b/data/platform/zaurus/gmenu2x.conf
+new file mode 100644
+index 0000000..4948462
+--- /dev/null
++++ b/data/platform/zaurus/gmenu2x.conf
+@@ -0,0 +1,4 @@
++videoBpp=16
++menuClock=416
++maxClock=520
++backlightTimeout=60
+diff --git a/data/platform/zaurus/input.conf b/data/platform/zaurus/input.conf
+new file mode 100644
+index 0000000..732fe14
+--- /dev/null
++++ b/data/platform/zaurus/input.conf
+@@ -0,0 +1,10 @@
++accept=keyboard,13
++cancel=keyboard,27
++altleft=keyboard,304
++altright=keyboard,303
++menu=keyboard,286
++settings=keyboard,115
++up=keyboard,273
++down=keyboard,274
++left=keyboard,276
++right=keyboard,275
+diff --git a/data/platform/zaurus/sections/settings/.empty b/data/platform/zaurus/sections/settings/.empty
+new file mode 100644
+index 0000000..e69de29
+diff --git a/data/platform/zaurus/sections/settings/10_poweroff b/data/platform/zaurus/sections/settings/10_poweroff
+new file mode 100644
+index 0000000..9246193
+--- /dev/null
++++ b/data/platform/zaurus/sections/settings/10_poweroff
+@@ -0,0 +1,4 @@
++title=Power Off
++description=Shut down the system
++icon=skin:icons/poweroff.png
++exec=/sbin/poweroff
+diff --git a/data/platform/zaurus/sections/settings/20_reboot b/data/platform/zaurus/sections/settings/20_reboot
+new file mode 100644
+index 0000000..ac1b62f
+--- /dev/null
++++ b/data/platform/zaurus/sections/settings/20_reboot
+@@ -0,0 +1,4 @@
++title=Reboot
++description=Reboot the system
++icon=skin:icons/reboot.png
++exec=/sbin/reboot
+diff --git a/data/platform/zaurus/sections/settings/30_suspend b/data/platform/zaurus/sections/settings/30_suspend
+new file mode 100644
+index 0000000..cbc824b
+--- /dev/null
++++ b/data/platform/zaurus/sections/settings/30_suspend
+@@ -0,0 +1,6 @@
++title=Suspend
++description=Suspend the system
++icon=skin:icons/suspend.png
++exec=/usr/bin/apm
++params= --suspend
++dontleave=true
+diff --git a/data/platform/zaurus/sections/settings/40_alsamixer b/data/platform/zaurus/sections/settings/40_alsamixer
+new file mode 100644
+index 0000000..6dc4964
+--- /dev/null
++++ b/data/platform/zaurus/sections/settings/40_alsamixer
+@@ -0,0 +1,5 @@
++title=Sound Mixer
++description=Configure sound settings
++icon=skin:icons/alsamixer.png
++exec=/usr/bin/alsamixer
++consoleapp=true
+diff --git a/data/platform/zaurus/skins/Default/imgs/buttons/accept.png b/data/platform/zaurus/skins/Default/imgs/buttons/accept.png
+new file mode 100644
+index 0000000..e3400f9
+Binary files /dev/null and b/data/platform/zaurus/skins/Default/imgs/buttons/accept.png differ
+diff --git a/data/platform/zaurus/skins/Default/imgs/buttons/cancel.png b/data/platform/zaurus/skins/Default/imgs/buttons/cancel.png
+new file mode 100644
+index 0000000..16de5be
+Binary files /dev/null and b/data/platform/zaurus/skins/Default/imgs/buttons/cancel.png differ
+diff --git a/src/cpu.cpp b/src/cpu.cpp
+index c30f17a..15fad2e 100644
+--- a/src/cpu.cpp
++++ b/src/cpu.cpp
+@@ -27,7 +27,7 @@ void writeStringToFile(const char *path, const char *content)
+ 	}
+ }
+ 
+-void jz_cpuspeed(unsigned clockspeed)
++void set_cpuspeed(unsigned clockspeed)
+ {
+ 	char freq[10];
+ 	sprintf(freq, "%d", clockspeed * 1000);
+diff --git a/src/cpu.h b/src/cpu.h
+index 869ae25..0427ea3 100644
+--- a/src/cpu.h
++++ b/src/cpu.h
+@@ -1,6 +1,6 @@
+ #ifndef CPU_H
+ #define CPU_H
+ 
+-void jz_cpuspeed(unsigned clockspeed);
++void set_cpuspeed(unsigned clockspeed);
+ 
+ #endif
+diff --git a/src/gmenu2x.cpp b/src/gmenu2x.cpp
+index 4047f14..4c4bf2a 100644
+--- a/src/gmenu2x.cpp
++++ b/src/gmenu2x.cpp
+@@ -225,13 +225,21 @@ void GMenu2X::initCPULimits() {
+ 	//       The NanoNote does not have cpufreq enabled in its kernel and
+ 	//       other devices are not actively maintained.
+ 	// TODO: Read min and max from sysfs.
++#if defined(PLATFORM_NANONOTE)
+ 	cpuFreqMin = 30;
+ 	cpuFreqMax = 500;
+ 	cpuFreqSafeMax = 420;
+ 	cpuFreqMenuDefault = 200;
+ 	cpuFreqAppDefault = 384;
+ 	cpuFreqMultiple = 24;
+-
++#elif defined(PLATFORM_ZAURUS)
++	cpuFreqMin = 104;
++	cpuFreqMax = 520;
++	cpuFreqSafeMax = 520;
++	cpuFreqMenuDefault = 208;
++	cpuFreqAppDefault = 520;
++	cpuFreqMultiple = 104;
++#endif
+ 	// Round min and max values to the specified multiple.
+ 	cpuFreqMin = ((cpuFreqMin + cpuFreqMultiple - 1) / cpuFreqMultiple)
+ 			* cpuFreqMultiple;
+@@ -255,6 +263,9 @@ GMenu2X::GMenu2X()
+ 	bottomBarIconY = resY-18;
+ 	bottomBarTextY = resY-10;
+ 
++	path = "";
++	getExePath();
++
+ #ifdef UNLOCK_VT
+ 	unlockVT();
+ #endif
+@@ -410,7 +421,10 @@ void GMenu2X::initMenu() {
+ 	menu = new Menu(this, ts);
+ 	for (uint i=0; i<menu->getSections().size(); i++) {
+ 		//Add virtual links in the applications section
+-		if (menu->getSections()[i]=="applications") {
++		//cout << menu->getSections()[i];
++		//cout << "\n";
++		if (menu->getSections()[i]=="apps") {
++
+ 			menu->addActionLink(i,"Explorer",MakeDelegate(this,&GMenu2X::explorer),tr["Launch an application"],"skin:icons/explorer.png");
+ 		}
+ 
+@@ -790,7 +804,6 @@ void GMenu2X::main() {
+ 				i++;
+ 			}
+ 		}
+-
+         switch (input.waitForPressedButton()) {
+             case InputManager::ACCEPT:
+                 if (menu->selLink() != NULL) menu->selLink()->run();
+@@ -836,6 +849,7 @@ void GMenu2X::explorer() {
+ 		if (confInt["saveSelection"] && (confInt["section"]!=menu->selSectionIndex() || confInt["link"]!=menu->selLinkIndex()))
+ 			writeConfig();
+ 
++		//string command = cmdclean(fd.path()+"/"+fd.file) + "; sync & cd "+cmdclean(getExePath())+"; exec ./gmenu2x";
+ 		string command = cmdclean(fd.getPath()+"/"+fd.getFile());
+ 		chdir(fd.getPath().c_str());
+ 		quit();
+@@ -1196,13 +1210,18 @@ void GMenu2X::editLink() {
+ 	sd.addSetting(new MenuSettingMultiString(this, ts, tr["Section"], tr["The section this link belongs to"], &newSection, &menu->getSections()));
+ 	sd.addSetting(new MenuSettingImage(this, ts, tr["Icon"], tr.translate("Select an icon for the link: $1", linkTitle.c_str(), NULL), &linkIcon, ".png,.bmp,.jpg,.jpeg"));
+ 	sd.addSetting(new MenuSettingFile(this, ts, tr["Manual"], tr["Select a graphic/textual manual or a readme"], &linkManual, ".man.png,.txt"));
++#if defined(PLATFORM_DINGUX) || defined(PLATFORM_NANONOTE)
+ 	sd.addSetting(new MenuSettingInt(this, ts, tr["Clock (default: 336)"], tr["Cpu clock frequency to set when launching this link"], &linkClock, cpuFreqMin, confInt["maxClock"], cpuFreqMultiple));
++#elif defined(PLATFORM_ZAURUS)
++	sd.addSetting(new MenuSettingInt(this, ts, tr["Clock (default: 416)"], tr["Cpu clock frequency to set when launching this link"], &linkClock, cpuFreqMin, confInt["maxClock"], cpuFreqMultiple));
++#endif
+ 	sd.addSetting(new MenuSettingString(this, ts, tr["Parameters"], tr["Parameters to pass to the application"], &linkParams, diagTitle, diagIcon));
+ 	sd.addSetting(new MenuSettingDir(this, ts, tr["Selector Directory"], tr["Directory to scan for the selector"], &linkSelDir));
+ 	sd.addSetting(new MenuSettingBool(this, ts, tr["Selector Browser"], tr["Allow the selector to change directory"], &linkSelBrowser));
+ 	sd.addSetting(new MenuSettingString(this, ts, tr["Selector Filter"], tr["Selector filter (Separate values with a comma)"], &linkSelFilter, diagTitle, diagIcon));
+ 	sd.addSetting(new MenuSettingDir(this, ts, tr["Selector Screenshots"], tr["Directory of the screenshots for the selector"], &linkSelScreens));
+ 	sd.addSetting(new MenuSettingFile(this, ts, tr["Selector Aliases"], tr["File containing a list of aliases for the selector"], &linkSelAliases));
++	sd.addSetting(new MenuSettingBool(this, ts, tr["Wrapper"], tr["Explicitly relaunch GMenu2X after execution"], &menu->selLinkApp()->needsWrapperRef()));
+ 	sd.addSetting(new MenuSettingBool(this, ts, tr["Don't Leave"], tr["Don't quit GMenu2X when launching this link"], &menu->selLinkApp()->runsInBackgroundRef()));
+ #ifdef PLATFORM_DINGUX
+ 	sd.addSetting(new MenuSettingBool(this, ts, tr["Display Console"], tr["Must be enabled for console-based applications"], &menu->selLinkApp()->consoleApp));
+@@ -1329,10 +1348,11 @@ void GMenu2X::scanner() {
+ 
+ 	uint lineY = 42;
+ 
+-#ifdef PLATFORM_PANDORA
++#if defined(PLATFORM_PANDORA) || defined(PLATFORM_ZAURUS)
+ 	//char *configpath = pnd_conf_query_searchpath();
+ #else
+ 	if (confInt["menuClock"]<336) {
++
+ 		setClock(336);
+ 		scanbg.write(font,tr["Raising cpu clock to 336MHz"],5,lineY);
+ 		scanbg.blit(s,0,0);
+@@ -1452,6 +1472,8 @@ unsigned short GMenu2X::getBatteryLevel() {
+ 
+ #if defined(PLATFORM_DINGUX) || defined(PLATFORM_NANONOTE)
+ 	batteryHandle = fopen("/sys/class/power_supply/battery/capacity", "r");
++#elif defined(PLATFORM_ZAURUS)
++	batteryHandle = fopen("/sys/devices/platform/sharpsl-pm/battery_percentage", "r");
+ #endif
+ 	if (batteryHandle) {
+ 		int battval = 0;
+@@ -1474,11 +1496,25 @@ void GMenu2X::setInputSpeed() {
+ 
+ void GMenu2X::setClock(unsigned mhz) {
+ 	mhz = constrain(mhz, cpuFreqMin, confInt["maxClock"]);
+-#if defined(PLATFORM_DINGUX) || defined(PLATFORM_NANONOTE)
+-	jz_cpuspeed(mhz);
++#if defined(PLATFORM_DINGUX) || defined(PLATFORM_NANONOTE) || defined(PLATFORM_ZAURUS)
++	set_cpuspeed(mhz);
+ #endif
+ }
+ 
++const string &GMenu2X::getExePath() {
++	if (path.empty()) {
++		char buf[255];
++		memset(buf, 0, 255);
++		int l = readlink("/proc/self/exe", buf, 255);
++
++		path = buf;
++		path = path.substr(0,l);
++		l = path.rfind("/");
++		path = path.substr(0,l+1);
++	}
++	return path;
++}
++
+ string GMenu2X::getDiskFree(const char *path) {
+ 	stringstream ss;
+ 	string df = "";
+diff --git a/src/gmenu2x.h b/src/gmenu2x.h
+index 6fb2542..e8b8a87 100644
+--- a/src/gmenu2x.h
++++ b/src/gmenu2x.h
+@@ -65,6 +65,7 @@ typedef std::tr1::unordered_map<std::string, int, std::tr1::hash<std::string> >
+ class GMenu2X {
+ private:
+ 	Touchscreen ts;
++	std::string path; //!< Contains the working directory of GMenu2X
+ 
+ 	/*!
+ 	Retrieves the free disk space on the sd
+@@ -133,6 +134,14 @@ public:
+ 	uint resX, resY, halfX, halfY;
+ 	uint bottomBarIconY, bottomBarTextY, linkColumns, linkRows;
+ 
++	/*!
++	Retrieves the parent directory of GMenu2X.
++	This functions is used to initialize the "path" variable.
++	@see path
++	@return String containing the parent directory
++	*/
++	const std::string &getExePath();
++
+ 	InputManager input;
+ 
+ 	//Configuration hashes
+diff --git a/src/linkapp.cpp b/src/linkapp.cpp
+index 54e3b5a..f411328 100644
+--- a/src/linkapp.cpp
++++ b/src/linkapp.cpp
+@@ -51,8 +51,13 @@ LinkApp::LinkApp(GMenu2X *gmenu2x_, Touchscreen &ts, InputManager &inputMgr_,
+ {
+ 	manual = "";
+ 	file = linkfile;
++	wrapper = false;
+ 	dontleave = false;
++#if defined(PLATFORM_DINGUX) || defined(PLATFORM_NANONOTE)
+ 	setClock(336);
++#elif defined(PLATFORM_ZAURUS)
++	setClock(520);
++#endif
+ 	selectordir = "";
+ 	selectorfilter = "";
+ 	icon = iconPath = "";
+@@ -83,6 +88,8 @@ LinkApp::LinkApp(GMenu2X *gmenu2x_, Touchscreen &ts, InputManager &inputMgr_,
+ 			params = value;
+ 		} else if (name == "manual") {
+ 			manual = value;
++		} else if (name == "wrapper") {
++			if (value=="true") wrapper = true;
+ 		} else if (name == "dontleave") {
+ 			if (value=="true") dontleave = true;
+ #ifdef PLATFORM_DINGUX
+@@ -174,6 +181,7 @@ bool LinkApp::save() {
+ 		if (selectorfilter!="" ) f << "selectorfilter="  << selectorfilter  << endl;
+ 		if (selectorscreens!="") f << "selectorscreens=" << selectorscreens << endl;
+ 		if (aliasfile!=""      ) f << "selectoraliases=" << aliasfile       << endl;
++		if (wrapper            ) f << "wrapper=true"                        << endl;
+ 		if (dontleave          ) f << "dontleave=true"                      << endl;
+ #ifdef PLATFORM_DINGUX
+ 		if (consoleApp         ) f << "consoleapp=true"                     << endl;
+@@ -223,8 +231,11 @@ void LinkApp::showManual() {
+ 	// Png manuals
+ 	string ext8 = manual.substr(manual.size()-8,8);
+ 	if (ext8==".man.png" || ext8==".man.bmp" || ext8==".man.jpg" || manual.substr(manual.size()-9,9)==".man.jpeg") {
++
+ 		//Raise the clock to speed-up the loading of the manual
++#if defined(PLATFORM_DINGUX) || defined(PLATFORM_NANONOTE)
+ 		gmenu2x->setClock(336);
++#endif
+ 
+ 		Surface *pngman = Surface::loadImage(manual);
+ 		if (!pngman) {
+@@ -302,7 +313,9 @@ void LinkApp::showManual() {
+ 		string line;
+ 		ifstream infile(manual.c_str(), ios_base::in);
+ 		if (infile.is_open()) {
++#if defined(PLATFORM_DINGUX) || defined(PLATFORM_NANONOTE)
+ 			gmenu2x->setClock(336);
++#endif
+ 			while (getline(infile, line, '\n')) txtman.push_back(line);
+ 			infile.close();
+ 
+@@ -320,7 +333,9 @@ void LinkApp::showManual() {
+ 	string line;
+ 	ifstream infile(manual.c_str(), ios_base::in);
+ 	if (infile.is_open()) {
+-		gmenu2x->setClock(336);
++#if defined(PLATFORM_DINGUX) || defined(PLATFORM_NANONOTE)
++			gmenu2x->setClock(336);
++#endif
+ 		while (getline(infile, line, '\n')) readme.push_back(line);
+ 		infile.close();
+ 
+@@ -402,6 +417,7 @@ void LinkApp::launch(const string &selectedFile, const string &selectedDir) {
+ #else
+ 	if (gmenu2x->confInt["outputLogs"])
+ 		command += " &> " + cmdclean(gmenu2x->getHome()) + "/log.txt";
++	if (wrapper) command += "; sync & cd "+cmdclean(gmenu2x->getExePath())+"; exec ./gmenu2x";
+ #endif
+ 	if (dontleave) {
+ 		system(command.c_str());
+@@ -464,6 +480,8 @@ void LinkApp::launch(const string &selectedFile, const string &selectedDir) {
+ 		//try relaunching gmenu2x
+ 		gmenu2x->main();
+ 	}
++
++	chdir(gmenu2x->getExePath().c_str());
+ }
+ 
+ const string &LinkApp::getExec() {
+diff --git a/src/linkapp.h b/src/linkapp.h
+index 542641d..94fc15c 100644
+--- a/src/linkapp.h
++++ b/src/linkapp.h
+@@ -46,6 +46,7 @@ private:
+ 	std::string aliasfile;
+ 	std::string file;
+ 
++	bool wrapper;
+ 	bool dontleave;
+ 
+ 	void start();
+@@ -90,6 +91,7 @@ public:
+ 
+ 	const std::string &getFile() { return file; }
+ 	void renameFile(const std::string &name);
++	bool &needsWrapperRef() { return wrapper; }
+ 	bool &runsInBackgroundRef() { return dontleave; }
+ };
+ 
+diff --git a/src/menu.cpp b/src/menu.cpp
+index f379722..a160abc 100644
+--- a/src/menu.cpp
++++ b/src/menu.cpp
+@@ -193,13 +193,14 @@ bool Menu::addLink(string path, string file, string section) {
+ 		if (!addSection(section))
+ 			return false;
+ 	}
+-
++	bool wrapper = false;
+ 	//strip the extension from the filename
+ 	string title = file;
+ 	string::size_type pos = title.rfind(".");
+ 	if (pos!=string::npos && pos>0) {
+ 		string ext = title.substr(pos, title.length());
+ 		transform(ext.begin(), ext.end(), ext.begin(), (int(*)(int)) tolower);
++		if (ext == ".gpu" || ext == ".dge") wrapper = false;
+ 		title = title.substr(0, pos);
+ 	}
+ 
+@@ -274,6 +275,7 @@ bool Menu::addLink(string path, string file, string section) {
+ 		if (!description.empty()) f << "description=" << description << endl;
+ 		if (!icon.empty()) f << "icon=" << icon << endl;
+ 		if (!manual.empty()) f << "manual=" << manual << endl;
++		if (wrapper) f << "wrapper=true" << endl;
+ 		f.close();
+  		sync();
+ 		int isection = find(sections.begin(),sections.end(),section) - sections.begin();

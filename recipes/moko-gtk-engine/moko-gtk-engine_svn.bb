@@ -12,6 +12,10 @@ SRC_URI="file://moko-gtk-engine.tar.gz"
 
 S="${WORKDIR}/${PN}"
 
+PACKAGES += "moko-gtk-theme"
+
 FILES_${PN}="/usr/lib/gtk-2.0/2.10.0/engines/libmoko-engine.so"
 FILES_${PN}-dbg = "/usr/lib/gtk-2.0/2.10.0/engines/.debug/*"
 FILES_${PN}-dev ="/usr/src/*"
+
+FILES_moko-gtk-theme = "/usr/share/themes/*"

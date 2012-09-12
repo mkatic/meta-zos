@@ -1,0 +1,48 @@
+commit 97ba74f0a41962f611bbda5c91e7c1d8372e126e
+Author: Marko Katic <dromede.gmail.com>
+Date:   Tue Jun 5 13:50:50 2012 +0200
+
+    SDL_fbevents.c: Implement mouse button switching.
+    
+    The silkscreen keys area is now used for switching mouse buttons.
+    Upper half will toggle left mouse button.
+    Lower half will toggle right mouse button.
+
+diff --git a/src/video/fbcon/SDL_fbevents.c b/src/video/fbcon/SDL_fbevents.c
+index 9322fc7..1e215a9 100644
+--- a/src/video/fbcon/SDL_fbevents.c
++++ b/src/video/fbcon/SDL_fbevents.c
+@@ -745,10 +745,29 @@ static void handle_tslib(_THIS)
+ {
+ 	struct ts_sample sample;
+ 	int button;
+-
+-	while (ts_read(ts_dev, &sample, 1) > 0) {
+-		button = (sample.pressure > 0) ? 1 : 0;
+-		button <<= 2;	/* must report it as button 3 */
++	static int toggled_button = 4; /*default to left mouse button */
++	while (ts_read(ts_dev, &sample, 1) > 0){
++		if(sample.y > (SDL_VideoSurface->w + 100)) /* ugly hack since sample.y can get abnormally high for no reason */
++			continue;
++		if (sample.y > SDL_VideoSurface->w){
++			if (sample.pressure > 0) {
++				if (sample.x < (SDL_VideoSurface->h / 2))
++					toggled_button = 1; /* right mouse button toggle, lower half */
++				else
++					toggled_button = 4; /* left mouse button toggle, upper half */
++			}
++			else {
++				button = 0;
++			}
++		}
++		else {
++			if (sample.pressure) {
++				button = toggled_button;
++			}
++			else {
++				button = 0;
++			}
++		}
+ 		if (strcmp(tslib_rotation, "CW") == 0) {
+ 			FB_vgamousecallback(button, 0, sample.y, (SDL_VideoSurface->h - sample.x));
+ 			return;

@@ -8,7 +8,9 @@ PR = "r0"
 
 inherit autotools
 
-SRC_URI = "${SOURCEFORGE_MIRROR}/enlightenment/imlib2-src/1.4.5/imlib2-${PV}.tar.bz2"
+SRC_URI = "${SOURCEFORGE_MIRROR}/enlightenment/imlib2-src/1.4.5/imlib2-${PV}.tar.bz2 \
+			file://remove_host_libdir.patch \
+			"
 
 EXTRA_OECONF = "--with-x \
 				--without-tiff \
